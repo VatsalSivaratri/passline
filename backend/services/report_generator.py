@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from openai import OpenAI
 
-from config import FEATHERLESS_API_KEY, FEATHERLESS_MODEL, REPORTS_DIR, FRAMES_DIR
+from config import ANVILGPT_API_KEY, ANVILGPT_BASE_URL, ANVILGPT_MODEL, REPORTS_DIR, FRAMES_DIR
 from models.audit import Violation, ViolationWithNarrative, RemediationCost
 
 logger = logging.getLogger(__name__)
@@ -26,8 +26,9 @@ logger = logging.getLogger(__name__)
 _SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
 
 _CLIENT = OpenAI(
-    api_key=FEATHERLESS_API_KEY,
-    base_url="https://api.featherless.ai/v1",
+    api_key=ANVILGPT_API_KEY,
+    base_url=ANVILGPT_BASE_URL,
+    timeout=180.0,
 )
 
 
@@ -98,7 +99,7 @@ def _generate_narrative_sync(violation: dict, facility: dict) -> dict:
     )
 
     response = _CLIENT.chat.completions.create(
-        model=FEATHERLESS_MODEL,
+        model=ANVILGPT_MODEL,
         max_tokens=300,
         messages=[
             {
