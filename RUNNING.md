@@ -1,0 +1,3 @@
+- depthAnything install step doesn't work
+- ffmpeg is a prerequisite not yet listed
+- an atlas tls failure is occuring 

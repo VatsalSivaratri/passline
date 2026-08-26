@@ -30,7 +30,7 @@ pip install -r requirements.txt
 
 # Install DepthAnything V2 (optional — falls back to placeholder if unavailable)
 git clone https://github.com/DepthAnything/Depth-Anything-V2
-pip install -e ./Depth-Anything-V2
+# No install step needed — depth_estimation.py adds this repo to sys.path
 # Download ViT-S checkpoint:
 # https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth
 # Place at: backend/checkpoints/depth_anything_v2_vits.pth
