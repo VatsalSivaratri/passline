@@ -50,12 +50,6 @@ function roomIcon(mg) {
   return MODULE_ICONS[mg.module_type] || '📷';
 }
 
-function formatCost(v) {
-  const low = v.remediation_cost?.low ?? 0;
-  const high = v.remediation_cost?.high ?? 0;
-  if (!low && !high) return 'Contact contractor for estimate';
-  return `$${Math.round(low).toLocaleString()} – $${Math.round(high).toLocaleString()}`;
-}
 
 function ReportPage() {
   const navigate = useNavigate();
@@ -250,9 +244,6 @@ function ReportPage() {
                               {v.remediation}
                             </div>
                           )}
-                          <div className="rf-cost">
-                            Estimated fix cost: <strong>{formatCost(v)}</strong>
-                          </div>
                         </div>
                       );
                     })}

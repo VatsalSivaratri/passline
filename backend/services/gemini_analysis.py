@@ -13,7 +13,7 @@ from typing import List
 from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
 
-from config import GEMINI_API_KEY, FRAMES_DIR, MODULE_TYPES
+from config import GEMINI_API_KEY, GEMINI_MODEL, FRAMES_DIR, MODULE_TYPES
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ def _call_gemini(parts: list, prompt: str, retries: int = 2) -> dict:
     for attempt in range(retries + 1):
         try:
             response = _get_client().models.generate_content(
-                model="gemini-2.5-flash",
+                model=GEMINI_MODEL,
                 contents=contents,
                 config=config,
             )
@@ -178,7 +178,7 @@ async def classify_room(frame_paths: List[str]) -> str:
             temperature=0.0,
         )
         response = _get_client().models.generate_content(
-            model="gemini-2.5-flash",
+            model=GEMINI_MODEL,
             contents=[prompt] + image_parts,
             config=config,
         )

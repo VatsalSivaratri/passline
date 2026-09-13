@@ -3,8 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from motor.motor_asyncio import AsyncIOMotorClient
+import certifi
 import logging
-
 from config import MONGODB_URI, MONGODB_DB, UPLOAD_DIR, FRAMES_DIR, REPORTS_DIR
 from routers import audits, modules, reports
 
@@ -16,18 +16,24 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Connecting to MongoDB...")
-    import certifi
-    app.state.mongo_client = AsyncIOMotorClient(
-        MONGODB_URI,
-        tlsCAFile=certifi.where(),
-    )
+
+    # TLS is required for Atlas (mongodb+srv://) but breaks a local mongod,
+    # which speaks plain TCP. Passing tlsCAFile at all implicitly enables TLS,
+    # so only pass it for hosted connections.
+    client_kwargs = {}
+    if MONGODB_URI.startswith("mongodb+srv://"):
+        client_kwargs["tlsCAFile"] = certifi.where()
+
+    app.state.mongo_client = AsyncIOMotorClient(MONGODB_URI, **client_kwargs)
     app.state.db = app.state.mongo_client[MONGODB_DB]
+
+    # Motor connects lazily, so verify now rather than failing later on an
+    # unrelated route with a confusing traceback.
+    await app.state.db.command("ping")
     logger.info(f"Connected to MongoDB database: {MONGODB_DB}")
 
     app.state.depth_estimator = None  # loaded lazily on first video upload
-
     yield
-
     # Shutdown
     app.state.mongo_client.close()
     logger.info("MongoDB connection closed.")

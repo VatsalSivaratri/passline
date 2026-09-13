@@ -89,9 +89,6 @@ def _generate_narrative_sync(violation: dict, facility: dict) -> dict:
         f"- Finding: {violation.get('finding', 'N/A')}\n"
         f"- Required standard: {violation.get('required_value', 'N/A')}\n"
         f"- Measurement calibrated: {violation.get('calibrated', False)}\n"
-        f"- Estimated remediation cost: "
-        f"${violation.get('remediation_cost', {}).get('low', 0)}-"
-        f"${violation.get('remediation_cost', {}).get('high', 0)}\n"
         f"- Facility type: {facility.get('facility_type', 'commercial')}\n"
         f"- State: {facility.get('state', 'federal')}\n\n"
         "Return JSON only, no markdown:\n"
@@ -278,11 +275,6 @@ def generate_pdf(
                     story.append(Paragraph(f"<b>Remediation:</b> {v['remediation']}", body_style))
                 if v.get("priority_rationale"):
                     story.append(Paragraph(f"<b>Priority:</b> {v['priority_rationale']}", body_style))
-                cost = v.get("remediation_cost", {})
-                story.append(Paragraph(
-                    f"<b>Estimated Cost:</b> ${cost.get('low', 0):,.0f} – ${cost.get('high', 0):,.0f}",
-                    body_style,
-                ))
                 story.append(Spacer(1, 0.12 * inch))
                 story.append(HRFlowable(width="100%", thickness=0.5, color=colors.lightgrey))
                 story.append(Spacer(1, 0.08 * inch))

@@ -334,7 +334,6 @@ const MOCK_FINDINGS = {
       title: 'Door clear width insufficient',
       detail: 'Measured door opening appears to be approximately 28–30". ADA requires a minimum clear width of 32" (36" preferred).',
       citation: 'ADA Standards §404.2.3',
-      estimatedCost: '$800 – $2,400',
     },
     {
       id: 'e2',
@@ -342,7 +341,6 @@ const MOCK_FINDINGS = {
       title: 'Door hardware may require tight grasping',
       detail: 'Round door knobs require tight grasping and twisting. Lever-style hardware is required.',
       citation: 'ADA Standards §404.2.7',
-      estimatedCost: '$80 – $200',
     },
   ],
   corridors: [
@@ -352,7 +350,6 @@ const MOCK_FINDINGS = {
       title: 'Corridor width below minimum',
       detail: 'Hallway appears narrower than the required 36" minimum passable width in one section.',
       citation: 'ADA Standards §403.5.1',
-      estimatedCost: '$1,500 – $8,000',
     },
   ],
   restrooms: [
@@ -362,7 +359,6 @@ const MOCK_FINDINGS = {
       title: 'No accessible stall detected',
       detail: 'No stall meeting the 60" × 60" turning space requirement was observed.',
       citation: 'ADA Standards §604.3.1',
-      estimatedCost: '$3,000 – $12,000',
     },
     {
       id: 'r2',
@@ -370,7 +366,6 @@ const MOCK_FINDINGS = {
       title: 'Grab bar missing or incorrectly placed',
       detail: 'Side grab bar appears absent or not mounted at the required 33–36" height.',
       citation: 'ADA Standards §604.5.1',
-      estimatedCost: '$200 – $600',
     },
   ],
   stairs: [
@@ -380,7 +375,6 @@ const MOCK_FINDINGS = {
       title: 'Handrail does not extend beyond top riser',
       detail: 'Handrail appears to end at the top step rather than extending 12" horizontally beyond it.',
       citation: 'ADA Standards §505.10.2',
-      estimatedCost: '$300 – $900',
     },
   ],
   parking: [
@@ -390,7 +384,6 @@ const MOCK_FINDINGS = {
       title: 'No van-accessible space identified',
       detail: 'Lots with accessible parking must include at least one van-accessible space with an 8-foot access aisle.',
       citation: 'ADA Standards §502.2',
-      estimatedCost: '$500 – $1,500',
     },
     {
       id: 'p2',
@@ -398,7 +391,6 @@ const MOCK_FINDINGS = {
       title: 'Accessible space sign not visible',
       detail: 'International Symbol of Accessibility sign must be mounted at minimum 60" above the ground.',
       citation: 'ADA Standards §502.6',
-      estimatedCost: '$100 – $300',
     },
   ],
   counter: [
@@ -408,7 +400,6 @@ const MOCK_FINDINGS = {
       title: 'No accessible lowered counter section',
       detail: 'Full counter height observed at approximately 42". A section no higher than 36" is required.',
       citation: 'ADA Standards §904.4.1',
-      estimatedCost: '$1,200 – $4,000',
     },
   ],
   elevator: [],
@@ -419,7 +410,6 @@ const MOCK_FINDINGS = {
       title: 'Signage mounted at incorrect height',
       detail: 'Room identification signs must be mounted with the centerline at 60" AFF (above finished floor).',
       citation: 'ADA Standards §703.4.1',
-      estimatedCost: '$50 – $150 per sign',
     },
   ],
 };
@@ -859,9 +849,6 @@ function VideoUploadPage() {
                     </div>
                     <div className="finding-title">{f.title}</div>
                     <div className="finding-detail">{f.detail}</div>
-                    <div className="finding-cost">
-                      Estimated fix: <strong>{f.estimatedCost}</strong>
-                    </div>
                   </div>
                 ))}
               </div>
