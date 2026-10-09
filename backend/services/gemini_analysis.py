@@ -8,6 +8,7 @@ Returns every ADA-relevant feature visible in the frames, with per-feature prope
 import hashlib
 import json
 import logging
+import time
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
@@ -194,6 +195,7 @@ def _call_gemini(parts: list, prompt: str, retries: int = 2,
             if attempt == retries:
                 raise AnalysisError(f"API call failed after {retries + 1} attempts: {e}") from e
             logger.warning(f"Gemini API error (attempt {attempt+1}): {e}")
+            time.sleep(2 * 2 ** attempt)  # back off instead of hammering a rate-limited API
     raise AnalysisError("unreachable")
 
 

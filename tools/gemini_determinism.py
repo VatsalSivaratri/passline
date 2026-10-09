@@ -19,6 +19,7 @@ Needs GEMINI_API_KEY in backend/.env. 2 x runs API calls.
 
 import argparse
 import asyncio
+import re
 import hashlib
 import itertools
 import json
@@ -32,11 +33,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+START_DIR = Path.cwd()  # resolve user-given paths against where the command was run
 os.chdir(ROOT / "backend")  # config.py resolves .env and output dirs relative to backend/
 sys.path.insert(0, str(ROOT / "backend"))
 
 from config import FRAMES_DIR, GEMINI_MODEL  # noqa: E402
-from services.gemini_analysis import analyze_features, features_prompt, prompt_hash  # noqa: E402
+from services.gemini_analysis import AnalysisError, analyze_features, features_prompt, prompt_hash  # noqa: E402
 from services.rules_engine import evaluate  # noqa: E402
 from services.video_processing import extract_key_frames  # noqa: E402
 
@@ -46,11 +48,32 @@ CONFIGS = {
 }
 
 
+TRANSIENT = ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")
+
+
+async def call_with_backoff(frames, cfg, max_tries=6):
+    """Rate limits and overload are not results: wait them out and retry.
+    Any other error is returned as an error run."""
+    for attempt in range(max_tries):
+        try:
+            return await analyze_features(frames, **cfg), attempt
+        except AnalysisError as e:
+            msg = str(e)
+            if not any(t in msg for t in TRANSIENT) or attempt == max_tries - 1:
+                raise
+            hint = re.search(r"retry in ([0-9.]+)s", msg)
+            wait = float(hint.group(1)) + 1 if hint else min(60, 10 * 2 ** attempt)
+            print(f"   transient ({'429' if '429' in msg else '503'}), waiting {wait:.0f}s")
+            time.sleep(wait)
+
+
 def jaccard(a: set, b: set) -> float:
     return 1.0 if not a and not b else len(a & b) / len(a | b)
 
 
-def summarize(runs: list) -> dict:
+def summarize(all_runs: list) -> dict:
+    # Error runs are reported in the count but excluded from stability metrics.
+    runs = [r for r in all_runs if not r.get("error")] or [{"features": [], "types": [], "violations": []}]
     counts = [len(r["features"]) for r in runs]
     type_sets = [frozenset(Counter(r["types"]).items()) for r in runs]   # multiset of feature types
     viol_sets = [frozenset(r["violations"]) for r in runs]
@@ -72,11 +95,11 @@ def summarize(runs: list) -> dict:
         "identical_violations_share": round(viol_share, 2),
         # average overlap between every pair of runs (1.0 = always the same)
         "mean_pairwise_jaccard_violations": round(
-            statistics.mean(jaccard(set(viol_sets[i]), set(viol_sets[j])) for i, j in pairs), 3),
+            statistics.mean(jaccard(set(viol_sets[i]), set(viol_sets[j])) for i, j in pairs), 3) if pairs else None,
         "violations_ever_reported": sorted(set().union(*viol_sets)),
         "violations_always_reported": sorted(set.intersection(*map(set, viol_sets))),
         "modal_violations": modal_viol,
-        "errors": sum(1 for r in runs if r.get("error")),
+        "errors": sum(1 for r in all_runs if r.get("error")),
     }
 
 
@@ -84,11 +107,13 @@ async def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--video", required=True)
     ap.add_argument("--runs", type=int, default=10)
-    ap.add_argument("--sleep", type=float, default=2.0, help="seconds between calls (rate limits)")
+    ap.add_argument("--sleep", type=float, default=13.0,
+                    help="seconds between calls; 13 keeps under the free tier's 5 requests/minute")
     ap.add_argument("--out", default=str(ROOT / "bench" / "determinism.json"))
     a = ap.parse_args()
 
-    frames = await extract_key_frames(str(Path(a.video).resolve()), "determinism", "run")
+    video = (START_DIR / a.video).resolve()
+    frames = await extract_key_frames(str(video), "determinism", "run")
     frame_hash = hashlib.sha256(b"".join((FRAMES_DIR / f).read_bytes() for f in frames)).hexdigest()[:16]
     print(f"{len(frames)} key frames, sha {frame_hash}; model {GEMINI_MODEL}")
 
@@ -97,9 +122,9 @@ async def main():
         for name, cfg in CONFIGS.items():
             t = time.perf_counter()
             try:
-                out = await analyze_features(frames, **cfg)
+                out, retries = await call_with_backoff(frames, cfg)
                 feats = out["features"]
-                run = {"features": feats,
+                run = {"features": feats, "transient_retries": retries,
                        "types": [f["feature_type"] for f in feats],
                        "violations": [v.rule_id for v in evaluate(feats, "m", False)]}
             except Exception as e:  # recorded, not hidden: an error is a result too
@@ -117,7 +142,7 @@ async def main():
                                          capture_output=True, text=True).stdout.strip(),
             "model": GEMINI_MODEL,
             "prompt_sha": prompt_hash(features_prompt()),
-            "video": Path(a.video).name,
+            "video": video.name,
             "frames": len(frames),
             "frames_sha256": frame_hash,
             "configs": CONFIGS,
@@ -132,7 +157,7 @@ async def main():
     for name, s in report["summary"].items():
         fc = s["feature_count"]
         print(f"{name:<11}{fc['min']:>8}-{fc['max']:<8}{fc['stdev']:>7}{s['identical_feature_types_share']:>11.0%}"
-              f"{s['identical_violations_share']:>14.0%}{s['mean_pairwise_jaccard_violations']:>10}{s['errors']:>7}")
+              f"{s['identical_violations_share']:>14.0%}{str(s['mean_pairwise_jaccard_violations']):>10}{s['errors']:>7}")
     print(f"\nsaved {a.out}")
 
 

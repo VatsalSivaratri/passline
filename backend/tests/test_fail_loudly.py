@@ -40,6 +40,7 @@ class FakeClient:
 def gemini(monkeypatch):
     """Install a fake client and skip reading frames from disk."""
     monkeypatch.setattr(ga, "_load_frame_as_part", lambda p: b"jpeg")
+    monkeypatch.setattr(ga.time, "sleep", lambda s: None)  # skip retry backoff in tests
 
     def install(reply):
         client = FakeClient(reply)
