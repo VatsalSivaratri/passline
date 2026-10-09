@@ -1,0 +1,99 @@
+{
+  "meta": {
+    "timestamp": "2026-10-09T06:44:18+00:00",
+    "git_commit": "4dfa8a8",
+    "git_dirty": true,
+    "cpu": "Apple M1 Pro",
+    "os": "macOS-26.6.2-arm64-arm-64bit",
+    "threads": 6,
+    "python": "3.12.14",
+    "torch": "2.14.1",
+    "onnxruntime": "1.31.0",
+    "numpy": "2.5.3",
+    "opencv": "5.0.0.93",
+    "frames": 50,
+    "frames_sha256": "2e2ebe8159190e8f",
+    "input": "518x518",
+    "warmup": 5,
+    "repeats": 3
+  },
+  "backends": {
+    "torch": {
+      "file_sha256": "b782898d8a3e8be1",
+      "size_mb": 99.2,
+      "load_ms": 2541.0,
+      "median_ms": 222.9,
+      "iqr_ms": [
+        220.5,
+        232.5
+      ],
+      "p95_ms": 247.1,
+      "run_medians_ms": [
+        223.6,
+        221.8,
+        222.8
+      ],
+      "run_spread_pct": 0.8,
+      "peak_rss_mb": 1467.0
+    },
+    "onnx_fp32": {
+      "file_sha256": "f4653ca773848713",
+      "size_mb": 98.9,
+      "load_ms": 191.0,
+      "median_ms": 354.1,
+      "iqr_ms": [
+        349.0,
+        367.6
+      ],
+      "p95_ms": 411.2,
+      "run_medians_ms": [
+        353.5,
+        366.2,
+        351.6
+      ],
+      "run_spread_pct": 4.1,
+      "peak_rss_mb": 657.0
+    },
+    "onnx_int8": {
+      "file_sha256": "dd997aff41229a08",
+      "size_mb": 35.4,
+      "load_ms": 146.0,
+      "median_ms": 254.3,
+      "iqr_ms": [
+        250.8,
+        278.7
+      ],
+      "p95_ms": 311.7,
+      "run_medians_ms": [
+        256.6,
+        253.1,
+        253.5
+      ],
+      "run_spread_pct": 1.4,
+      "peak_rss_mb": 556.0
+    }
+  },
+  "accuracy": {
+    "onnx_fp32_vs_torch": {
+      "abs_rel_pct": 5.8614743466023356e-05,
+      "rmse_m": 1.201817099172331e-06,
+      "mae_m": 9.416463626621407e-07,
+      "delta1_pct": 100.0,
+      "p95_rel_pct": 0.00015873098163865507,
+      "worst_frame_abs_rel_pct": 0.00012225805221532937
+    },
+    "onnx_int8_vs_torch": {
+      "abs_rel_pct": 2.4708971977233887,
+      "rmse_m": 0.050240542739629745,
+      "mae_m": 0.03806677833199501,
+      "delta1_pct": 99.99458117797886,
+      "p95_rel_pct": 7.40498161315918,
+      "worst_frame_abs_rel_pct": 10.576525330543518
+    }
+  },
+  "depth_range_m": [
+    0.83,
+    1.79,
+    2.88
+  ]
+}
