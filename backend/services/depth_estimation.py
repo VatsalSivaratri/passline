@@ -1,79 +1,43 @@
 """
 Step 5B: Depth Estimation
 
-Wraps DepthAnything V2 ViT-S (metric, indoor) for per-frame inference.
-Falls back gracefully if model is unavailable.
+Wraps Depth Anything V2 ViT-S metric (Hypersim, indoor). Backend is PyTorch
+or ONNX Runtime, chosen by DEPTH_BACKEND. See services/depth_backends.py.
 """
 
 import logging
-import sys
-from pathlib import Path
 from typing import Optional
 
 import cv2
 import numpy as np
 
-from config import DEPTH_MODEL_PATH, FRAMES_DIR
-
-# Depth-Anything-V2 has no setup.py — add repo root to path directly
-_DA2_ROOT = Path(__file__).parent.parent / "Depth-Anything-V2"
-if _DA2_ROOT.exists() and str(_DA2_ROOT) not in sys.path:
-    sys.path.insert(0, str(_DA2_ROOT))
+from config import DA2_ROOT, DEPTH_BACKEND, DEPTH_MODEL_PATH, DEPTH_ONNX_PATH, FRAMES_DIR
+from services.depth_backends import OnnxDepth, TorchDepth
 
 logger = logging.getLogger(__name__)
 
 
 class DepthEstimator:
-    def __init__(self):
+    """Picks the depth backend from config (DEPTH_BACKEND = torch | onnx)."""
+
+    def __init__(self, backend: str = DEPTH_BACKEND):
+        self.backend_name = backend
         self.model = None
-        self.transform = None
-        self._load_model()
-
-    def _load_model(self):
         try:
-            import torch
-            from depth_anything_v2.dpt import DepthAnythingV2  # type: ignore
-
-            config = {
-                "encoder": "vits",
-                "features": 64,
-                "out_channels": [48, 96, 192, 384],
-            }
-            self.model = DepthAnythingV2(**config)
-            state = torch.load(str(DEPTH_MODEL_PATH), map_location="cpu")
-            self.model.load_state_dict(state)
-            self.model.eval()
-            logger.info("DepthAnything V2 ViT-S loaded successfully.")
+            if backend == "onnx":
+                self.model = OnnxDepth(str(DEPTH_ONNX_PATH))
+            else:
+                self.model = TorchDepth(str(DEPTH_MODEL_PATH), str(DA2_ROOT))
+            logger.info(f"Depth Anything V2 metric ViT-S loaded ({backend}).")
         except Exception as e:
-            logger.warning(f"Could not load DepthAnything V2: {e}. Depth estimation will be unavailable.")
-            self.model = None
+            logger.warning(f"Could not load depth model ({backend}): {e}. Depth estimation unavailable.")
 
     def predict(self, image_bgr: np.ndarray) -> Optional[np.ndarray]:
-        """
-        Returns HxW depth map (float32, metric depth in meters) or None.
-        """
+        """Returns HxW metric depth in meters (float32), or None."""
         if self.model is None:
             return None
         try:
-            import torch
-
-            rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-            # Resize for model input (518x518 recommended for ViT-S)
-            h, w = image_bgr.shape[:2]
-            inp = cv2.resize(rgb, (518, 518))
-            inp_t = (
-                torch.from_numpy(inp)
-                .float()
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-                / 255.0
-            )
-            with torch.no_grad():
-                depth = self.model(inp_t)
-            # Resize back to original resolution
-            depth_np = depth.squeeze().cpu().numpy()
-            depth_resized = cv2.resize(depth_np, (w, h), interpolation=cv2.INTER_LINEAR)
-            return depth_resized.astype(np.float32)
+            return self.model.predict(image_bgr)
         except Exception as e:
             logger.error(f"Depth inference error: {e}")
             return None

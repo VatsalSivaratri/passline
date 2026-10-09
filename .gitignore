@@ -1,5 +1,5 @@
 # Python
-venv/
+.venv/
 __pycache__/
 *.pyc
 *.pyo
@@ -28,3 +28,14 @@ client/build/
 uploads/
 frames/
 reports/
+
+# depth model artifacts
+models/*.onnx
+backend/checkpoints/
+backend/Depth-Anything-V2/
+bench/frames/
+bench/_tmp/
+
+*.mov
+
+

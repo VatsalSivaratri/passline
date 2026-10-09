@@ -17,7 +17,10 @@ ANVILGPT_MODEL = os.getenv("ANVILGPT_MODEL", "llama3.2:latest")
 UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "./uploads"))
 FRAMES_DIR = Path(os.getenv("FRAMES_DIR", "./frames"))
 REPORTS_DIR = Path(os.getenv("REPORTS_DIR", "./reports"))
-DEPTH_MODEL_PATH = Path(os.getenv("DEPTH_MODEL_PATH", "./checkpoints/depth_anything_v2_vits.pth"))
+DEPTH_MODEL_PATH = Path(os.getenv("DEPTH_MODEL_PATH", "./checkpoints/depth_anything_v2_metric_hypersim_vits.pth"))
+DEPTH_BACKEND = os.getenv("DEPTH_BACKEND", "torch")  # torch | onnx
+DEPTH_ONNX_PATH = Path(os.getenv("DEPTH_ONNX_PATH", "../models/dav2_int8.onnx"))
+DA2_ROOT = Path(os.getenv("DA2_ROOT", "./Depth-Anything-V2"))
 
 for d in (UPLOAD_DIR, FRAMES_DIR, REPORTS_DIR):
     d.mkdir(parents=True, exist_ok=True)
