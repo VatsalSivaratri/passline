@@ -18,7 +18,7 @@ class RenameModuleRequest(BaseModel):
 from services.video_processing import extract_key_frames, VideoProcessingError
 from services.calibration import calibrate_frames
 from services.depth_estimation import process_frames_depth
-from services.gemini_analysis import analyze_features, classify_room, get_default_result
+from services.gemini_analysis import AnalysisError, analyze_features, classify_room
 from services.feature_rules import check_feature_compliance
 
 router = APIRouter()
@@ -58,6 +58,7 @@ async def create_module(
         "annotated_frames": [],
         "depth_map_frames": [],
         "error_message": None,
+        "warnings": [],
     }
 
     await db["audits"].update_one(
@@ -195,6 +196,7 @@ async def get_module_results(audit_id: str, module_id: str, request: Request):
         "violations": module.get("violations", []),
         "annotated_frames": module.get("annotated_frames", []),
         "depth_map_frames": module.get("depth_map_frames", []),
+        "warnings": module.get("warnings", []),
     }
 
 
@@ -210,6 +212,9 @@ async def run_processing_pipeline(
     db,
     depth_estimator,
 ):
+    # Anything that degraded the result without stopping it. Saved with the
+    # module so the report can say what was not checked, instead of hiding it.
+    warnings: list = []
     try:
         # --- Step 3: Extract key frames ---
         await _update_module(db, audit_id, module_id, {
@@ -222,7 +227,14 @@ async def run_processing_pipeline(
             await _update_module(db, audit_id, module_id, {
                 "status": "classifying", "progress": 12,
             })
-            module_type = await classify_room(frame_paths)
+            try:
+                module_type = await classify_room(frame_paths)
+            except AnalysisError as e:
+                # Feature rules don't depend on room type, so the run can continue,
+                # but it must not claim a room type it doesn't know.
+                logger.error(f"Room classification failed for module {module_id}: {e}")
+                module_type = "unclassified"
+                warnings.append(f"Room type could not be determined: {e}")
             await _update_module(db, audit_id, module_id, {
                 "module_type": module_type, "progress": 18,
             })
@@ -243,11 +255,10 @@ async def run_processing_pipeline(
 
         # --- Step 5A: Gemini feature detection ---
         await _update_module(db, audit_id, module_id, {"progress": 40})
-        try:
-            features_result = await analyze_features(frame_paths)
-        except Exception as e:
-            logger.error(f"Gemini feature detection failed: {e}. Using defaults.")
-            features_result = get_default_result()
+        # No fallback here: with no detections there is nothing to check, and an
+        # empty list would read as "no violations". AnalysisError goes to the
+        # handler below and marks the module as errored.
+        features_result = await analyze_features(frame_paths)
 
         features = features_result.get("features", [])
         await _update_module(db, audit_id, module_id, {
@@ -265,6 +276,8 @@ async def run_processing_pipeline(
         )
         measurements = depth_result["measurements"]
         depth_map_frames = depth_result["depth_map_frames"]
+        if not depth_result["depth_available"]:
+            warnings.append("Depth model unavailable: no measurements were taken.")
 
         # --- Annotated frames ---
         await _update_module(db, audit_id, module_id, {"progress": 75})
@@ -296,9 +309,17 @@ async def run_processing_pipeline(
             "violations": violations_dicts,
             "annotated_frames": annotated_frames,
             "depth_map_frames": depth_map_frames,
+            "warnings": warnings,
         })
         logger.info(f"Module {module_id} complete. {len(violations_dicts)} violation(s) found.")
 
+    except AnalysisError as e:
+        logger.error(f"Feature detection failed for module {module_id}: {e}")
+        await _update_module(db, audit_id, module_id, {
+            "status": "error",
+            "error_message": f"Feature detection failed, so this space was not checked: {e}",
+            "warnings": warnings,
+        })
     except VideoProcessingError as e:
         logger.error(f"Video processing error for module {module_id}: {e}")
         await _update_module(db, audit_id, module_id, {

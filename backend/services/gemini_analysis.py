@@ -19,6 +19,11 @@ logger = logging.getLogger(__name__)
 
 _genai_client = None
 
+
+class AnalysisError(Exception):
+    """Gemini could not produce a usable answer. Callers must handle this
+    explicitly; there is no default result that pretends to be a prediction."""
+
 FEATURE_TYPES = [
     "door", "door_hardware", "door_threshold", "door_closer",
     "toilet", "toilet_grab_bar", "sink", "sink_faucet", "sink_clearance",
@@ -51,12 +56,22 @@ def _load_frame_as_part(frame_path: str):
     return genai_types.Part.from_bytes(data=data, mime_type="image/jpeg")
 
 
+def _parse_json(text: str) -> dict:
+    """Parse model output as JSON, tolerating a ```json fence around it."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.startswith("json"):
+            text = text[4:]
+    return json.loads(text)
+
+
 def _call_gemini(parts: list, prompt: str, retries: int = 2) -> dict:
     """Call Gemini 2.5 Flash with image parts and return parsed JSON."""
     contents = [prompt] + parts
     config = genai_types.GenerateContentConfig(
         response_mime_type="application/json",
-        temperature=0.1,
+        temperature=0.0,  # same input should give the same answer
     )
     for attempt in range(retries + 1):
         try:
@@ -65,23 +80,16 @@ def _call_gemini(parts: list, prompt: str, retries: int = 2) -> dict:
                 contents=contents,
                 config=config,
             )
-            text = response.text.strip()
-            # Strip markdown code fences if present
-            if text.startswith("```"):
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            return json.loads(text)
+            return _parse_json(response.text)
         except json.JSONDecodeError as e:
             if attempt == retries:
-                logger.error(f"Gemini returned invalid JSON after {retries+1} attempts: {e}")
-                raise
+                raise AnalysisError(f"invalid JSON after {retries + 1} attempts: {e}") from e
             logger.warning(f"Gemini JSON parse error (attempt {attempt+1}), retrying...")
         except Exception as e:
             if attempt == retries:
-                raise
+                raise AnalysisError(f"API call failed after {retries + 1} attempts: {e}") from e
             logger.warning(f"Gemini API error (attempt {attempt+1}): {e}")
-    return {}
+    raise AnalysisError("unreachable")
 
 
 async def analyze_features(frame_paths: List[str]) -> dict:
@@ -90,6 +98,8 @@ async def analyze_features(frame_paths: List[str]) -> dict:
     Sends up to 8 frames and returns all detected ADA-relevant features.
     Returns: {"features": [{"feature_type": str, "properties": dict,
                              "confidence": float, "frame_index": int}, ...]}
+    Raises AnalysisError if detection fails. An empty feature list means
+    Gemini looked and found nothing, never that the call failed.
     """
     selected_paths = frame_paths[:16]
     image_parts = []
@@ -100,8 +110,7 @@ async def analyze_features(frame_paths: List[str]) -> dict:
             logger.warning(f"Could not load frame {p}: {e}")
 
     if not image_parts:
-        logger.warning("No frames available for feature analysis")
-        return {"features": []}
+        raise AnalysisError("no frames could be loaded for feature detection")
 
     types_str = ", ".join(FEATURE_TYPES)
     prompt = (
@@ -124,44 +133,31 @@ async def analyze_features(frame_paths: List[str]) -> dict:
         'Return ONLY: {"features": [ ... ]}'
     )
 
-    try:
-        result = _call_gemini(image_parts, prompt)
-        if "features" not in result:
-            logger.warning("Gemini response missing 'features' key — wrapping")
-            result = {"features": []}
-        # Filter to only known feature types
-        valid = [
-            f for f in result["features"]
-            if f.get("feature_type") in FEATURE_TYPES
-        ]
-        if len(valid) < len(result["features"]):
-            logger.warning(
-                f"Dropped {len(result['features']) - len(valid)} features with unknown type"
-            )
-        result["features"] = valid
-        logger.info(f"analyze_features: detected {len(valid)} feature(s)")
-        return result
-    except Exception as e:
-        logger.error(f"analyze_features failed: {e}")
-        return {"features": []}
+    result = _call_gemini(image_parts, prompt)
+    if not isinstance(result.get("features"), list):
+        raise AnalysisError(f"response has no 'features' list: {str(result)[:200]}")
+    valid = [f for f in result["features"] if f.get("feature_type") in FEATURE_TYPES]
+    if len(valid) < len(result["features"]):
+        logger.warning(f"Dropped {len(result['features']) - len(valid)} features with unknown type")
+    result["features"] = valid
+    logger.info(f"analyze_features: detected {len(valid)} feature(s)")
+    return result
 
 
 async def classify_room(frame_paths: List[str]) -> str:
     """
     Use Gemini to identify the room/space type from extracted frames.
-    Returns one of the MODULE_TYPES strings. Falls back to 'entrance' on failure.
+    Returns one of MODULE_TYPES. Raises AnalysisError on failure; the old
+    behavior of returning 'entrance' made failures look like real predictions.
     """
-    selected_paths = frame_paths[:5]
     image_parts = []
-    for p in selected_paths:
+    for p in frame_paths[:5]:
         try:
             image_parts.append(_load_frame_as_part(p))
         except Exception as e:
             logger.warning(f"Could not load frame {p} for classification: {e}")
-
     if not image_parts:
-        logger.warning("No frames available for room classification — defaulting to 'entrance'")
-        return "entrance"
+        raise AnalysisError("no frames could be loaded for room classification")
 
     types_list = ", ".join(MODULE_TYPES)
     prompt = (
@@ -171,34 +167,9 @@ async def classify_room(frame_paths: List[str]) -> str:
         'Return ONLY a JSON object with this exact structure: {"room_type": "<value>"}\n'
         "No explanation, no markdown, just the JSON."
     )
-
-    try:
-        config = genai_types.GenerateContentConfig(
-            response_mime_type="application/json",
-            temperature=0.0,
-        )
-        response = _get_client().models.generate_content(
-            model=GEMINI_MODEL,
-            contents=[prompt] + image_parts,
-            config=config,
-        )
-        text = response.text.strip()
-        if text.startswith("```"):
-            text = text.split("```")[1]
-            if text.startswith("json"):
-                text = text[4:]
-        result = json.loads(text)
-        detected = result.get("room_type", "").strip()
-        if detected in MODULE_TYPES:
-            logger.info(f"Room classified as: {detected}")
-            return detected
-        logger.warning(f"Gemini returned unrecognized room type '{detected}' — defaulting to 'entrance'")
-    except Exception as e:
-        logger.error(f"Room classification failed: {e} — defaulting to 'entrance'")
-
-    return "entrance"
-
-
-def get_default_result() -> dict:
-    """Return a safe default result when Gemini is unavailable."""
-    return {"features": []}
+    result = _call_gemini(image_parts, prompt)
+    detected = str(result.get("room_type", "")).strip()
+    if detected not in MODULE_TYPES:
+        raise AnalysisError(f"unrecognized room type {detected!r}")
+    logger.info(f"Room classified as: {detected}")
+    return detected

@@ -141,21 +141,9 @@ def process_frames_depth(
                 width_in = measure_width_from_bbox(depth, img, bbox, pixels_per_inch)
                 if width_in is not None:
                     measurements["clearance_inches"] = round(width_in, 1)
-        else:
-            # No depth model — generate a placeholder so the UI still shows something
-            placeholder = _make_placeholder_depth(img)
-            depth_name = f"depth_{i + 1:03d}.jpg"
-            depth_out = out_dir / depth_name
-            cv2.imwrite(str(depth_out), placeholder)
-            depth_map_frames.append(f"{audit_id}/{module_id}/{depth_name}")
-
-    return {"measurements": measurements, "depth_map_frames": depth_map_frames}
-
-
-def _make_placeholder_depth(image_bgr: np.ndarray) -> np.ndarray:
-    """Grayscale + colormap pseudo-depth from luminance when model unavailable."""
-    gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
-    # Invert so closer (brighter) objects appear warm
-    inverted = 255 - gray
-    colored = cv2.applyColorMap(inverted, cv2.COLORMAP_INFERNO)
-    return colored
+    # When the model is missing, return no depth maps rather than a fake one.
+    return {
+        "measurements": measurements,
+        "depth_map_frames": depth_map_frames,
+        "depth_available": estimator.model is not None,
+    }

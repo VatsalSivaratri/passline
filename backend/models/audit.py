@@ -55,6 +55,7 @@ class AuditModule(BaseModel):
     annotated_frames: List[str] = []
     depth_map_frames: List[str] = []
     error_message: Optional[str] = None
+    warnings: List[str] = []
 
 
 class ReportSummary(BaseModel):
@@ -119,6 +120,7 @@ class ModuleResultsResponse(BaseModel):
     violations: List[dict]
     annotated_frames: List[str]
     depth_map_frames: List[str]
+    warnings: List[str] = []
 
 
 class ReportResponse(BaseModel):
