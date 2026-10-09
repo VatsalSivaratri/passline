@@ -1,8 +1,8 @@
 {
   "meta": {
-    "timestamp": "2026-10-09T06:44:18+00:00",
-    "git_commit": "4dfa8a8",
-    "git_dirty": true,
+    "timestamp": "2026-10-09T07:10:38+00:00",
+    "git_commit": "270e2ca8",
+    "git_dirty": false,
     "cpu": "Apple M1 Pro",
     "os": "macOS-26.6.2-arm64-arm-64bit",
     "threads": 6,
@@ -21,56 +21,56 @@
     "torch": {
       "file_sha256": "b782898d8a3e8be1",
       "size_mb": 99.2,
-      "load_ms": 2541.0,
-      "median_ms": 222.9,
+      "load_ms": 1906.0,
+      "median_ms": 220.6,
       "iqr_ms": [
-        220.5,
-        232.5
+        219.7,
+        224.3
       ],
-      "p95_ms": 247.1,
+      "p95_ms": 233.2,
       "run_medians_ms": [
-        223.6,
-        221.8,
-        222.8
+        220.0,
+        219.9,
+        221.9
       ],
-      "run_spread_pct": 0.8,
-      "peak_rss_mb": 1467.0
+      "run_spread_pct": 1.0,
+      "peak_rss_mb": 1510.0
     },
     "onnx_fp32": {
       "file_sha256": "f4653ca773848713",
       "size_mb": 98.9,
-      "load_ms": 191.0,
-      "median_ms": 354.1,
+      "load_ms": 135.0,
+      "median_ms": 350.3,
       "iqr_ms": [
-        349.0,
-        367.6
+        348.0,
+        356.6
       ],
-      "p95_ms": 411.2,
+      "p95_ms": 381.1,
       "run_medians_ms": [
-        353.5,
-        366.2,
-        351.6
+        350.3,
+        351.1,
+        349.7
       ],
-      "run_spread_pct": 4.1,
-      "peak_rss_mb": 657.0
+      "run_spread_pct": 0.4,
+      "peak_rss_mb": 666.0
     },
     "onnx_int8": {
       "file_sha256": "dd997aff41229a08",
       "size_mb": 35.4,
-      "load_ms": 146.0,
-      "median_ms": 254.3,
+      "load_ms": 93.0,
+      "median_ms": 250.9,
       "iqr_ms": [
-        250.8,
-        278.7
+        250.0,
+        254.1
       ],
-      "p95_ms": 311.7,
+      "p95_ms": 265.3,
       "run_medians_ms": [
-        256.6,
-        253.1,
-        253.5
+        251.2,
+        251.0,
+        250.0
       ],
-      "run_spread_pct": 1.4,
-      "peak_rss_mb": 556.0
+      "run_spread_pct": 0.5,
+      "peak_rss_mb": 614.0
     }
   },
   "accuracy": {
