@@ -5,10 +5,14 @@ Sends key frames to Gemini 2.5 Flash with a universal feature-detection prompt.
 Returns every ADA-relevant feature visible in the frames, with per-feature properties.
 """
 
+import hashlib
 import json
 import logging
+from enum import Enum
 from pathlib import Path
-from typing import List
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 from google import genai  # type: ignore
 from google.genai import types as genai_types  # type: ignore
@@ -41,6 +45,101 @@ FEATURE_TYPES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Response schema. Passed to Gemini as response_schema so the model can only
+# return known feature types and known property values, instead of free-form
+# JSON that varies run to run. Property names and values match data/rules.yaml.
+# ---------------------------------------------------------------------------
+
+FeatureType = Enum("FeatureType", {t: t for t in FEATURE_TYPES}, type=str)
+
+
+class Relative(str, Enum):
+    narrow = "narrow"
+    adequate = "adequate"
+    wide = "wide"
+
+
+class Height(str, Enum):
+    low = "low"
+    ok = "ok"
+    high = "high"
+
+
+class Slope(str, Enum):
+    flat = "flat"
+    gentle = "gentle"
+    steep = "steep"
+
+
+class Clearance(str, Enum):
+    tight = "tight"
+    adequate = "adequate"
+
+
+class Hardware(str, Enum):
+    lever = "lever"
+    round_knob = "round_knob"
+    knob = "knob"
+    push_bar = "push_bar"
+    pull_handle = "pull_handle"
+    automatic = "automatic"
+
+
+class Surface(str, Enum):
+    firm = "firm"
+    loose = "loose"
+    uneven = "uneven"
+    cracked = "cracked"
+    slippery = "slippery"
+    thick_carpet = "thick_carpet"
+
+
+class FeatureProps(BaseModel):
+    present: Optional[bool] = None
+    width_relative: Optional[Relative] = None
+    height_relative: Optional[Height] = None
+    handle_type: Optional[Hardware] = None
+    faucet_type: Optional[Hardware] = None
+    appears_raised: Optional[bool] = None
+    swing_direction: Optional[str] = None
+    both_sides: Optional[bool] = None
+    extension_present: Optional[bool] = None
+    handrail: Optional[bool] = None
+    handrails_present: Optional[bool] = None
+    slope_apparent: Optional[Slope] = None
+    surface_condition: Optional[Surface] = None
+    clearance_relative: Optional[Clearance] = None
+    knee_clearance_present: Optional[bool] = None
+    hi_lo_present: Optional[bool] = None
+    isa_present: Optional[bool] = None
+    braille_present: Optional[bool] = None
+    access_aisle_present: Optional[bool] = None
+    van_accessible: Optional[bool] = None
+    accessible_section_present: Optional[bool] = None
+    accessible_lane_present: Optional[bool] = None
+    count: Optional[int] = None
+
+
+class BoundingBox(BaseModel):
+    x1: float
+    y1: float
+    x2: float
+    y2: float
+
+
+class DetectedFeature(BaseModel):
+    feature_type: FeatureType
+    properties: FeatureProps
+    confidence: float
+    frame_index: int
+    bounding_box: Optional[BoundingBox] = None
+
+
+class FeaturesResponse(BaseModel):
+    features: List[DetectedFeature]
+
+
 def _get_client():
     global _genai_client
     if _genai_client is None:
@@ -66,12 +165,18 @@ def _parse_json(text: str) -> dict:
     return json.loads(text)
 
 
-def _call_gemini(parts: list, prompt: str, retries: int = 2) -> dict:
-    """Call Gemini 2.5 Flash with image parts and return parsed JSON."""
+def _call_gemini(parts: list, prompt: str, retries: int = 2,
+                 temperature: float = 0.0, schema=None) -> dict:
+    """Call Gemini with image parts and return parsed JSON.
+
+    temperature 0 and a response schema are the defaults because the same
+    frames should give the same answer; see tools/gemini_determinism.py.
+    """
     contents = [prompt] + parts
     config = genai_types.GenerateContentConfig(
         response_mime_type="application/json",
-        temperature=0.0,  # same input should give the same answer
+        temperature=temperature,
+        response_schema=schema,
     )
     for attempt in range(retries + 1):
         try:
@@ -92,28 +197,13 @@ def _call_gemini(parts: list, prompt: str, retries: int = 2) -> dict:
     raise AnalysisError("unreachable")
 
 
-async def analyze_features(frame_paths: List[str]) -> dict:
-    """
-    Universal ADA feature detection.
-    Sends up to 8 frames and returns all detected ADA-relevant features.
-    Returns: {"features": [{"feature_type": str, "properties": dict,
-                             "confidence": float, "frame_index": int}, ...]}
-    Raises AnalysisError if detection fails. An empty feature list means
-    Gemini looked and found nothing, never that the call failed.
-    """
-    selected_paths = frame_paths[:16]
-    image_parts = []
-    for p in selected_paths:
-        try:
-            image_parts.append(_load_frame_as_part(p))
-        except Exception as e:
-            logger.warning(f"Could not load frame {p}: {e}")
+def prompt_hash(prompt: str) -> str:
+    return hashlib.sha256(prompt.encode()).hexdigest()[:12]
 
-    if not image_parts:
-        raise AnalysisError("no frames could be loaded for feature detection")
 
+def features_prompt() -> str:
     types_str = ", ".join(FEATURE_TYPES)
-    prompt = (
+    return (
         "You are analyzing building images for ADA (Americans with Disabilities Act) "
         "accessibility compliance.\n"
         "Identify every ADA-relevant feature visible across all provided images.\n\n"
@@ -133,9 +223,38 @@ async def analyze_features(frame_paths: List[str]) -> dict:
         'Return ONLY: {"features": [ ... ]}'
     )
 
-    result = _call_gemini(image_parts, prompt)
+
+async def analyze_features(frame_paths: List[str], temperature: float = 0.0,
+                           structured: bool = True) -> dict:
+    """
+    Universal ADA feature detection.
+    Sends up to 8 frames and returns all detected ADA-relevant features.
+    Returns: {"features": [{"feature_type": str, "properties": dict,
+                             "confidence": float, "frame_index": int}, ...]}
+    Raises AnalysisError if detection fails. An empty feature list means
+    Gemini looked and found nothing, never that the call failed.
+    """
+    selected_paths = frame_paths[:16]
+    image_parts = []
+    for p in selected_paths:
+        try:
+            image_parts.append(_load_frame_as_part(p))
+        except Exception as e:
+            logger.warning(f"Could not load frame {p}: {e}")
+
+    if not image_parts:
+        raise AnalysisError("no frames could be loaded for feature detection")
+
+    prompt = features_prompt()
+    result = _call_gemini(image_parts, prompt, temperature=temperature,
+                          schema=FeaturesResponse if structured else None)
     if not isinstance(result.get("features"), list):
         raise AnalysisError(f"response has no 'features' list: {str(result)[:200]}")
+    for f in result["features"]:
+        # A schema'd response spells every unset property as null. Drop those so
+        # rules see "absent" exactly as before (p.get(key, default) needs absence).
+        props = f.get("properties") or {}
+        f["properties"] = {k: v for k, v in props.items() if v is not None}
     valid = [f for f in result["features"] if f.get("feature_type") in FEATURE_TYPES]
     if len(valid) < len(result["features"]):
         logger.warning(f"Dropped {len(result['features']) - len(valid)} features with unknown type")

@@ -1,5 +1,7 @@
 # PASSLINE — ADA Compliance Self-Audit
 
+[![CI](https://github.com/VatsalSivaratri/passline/actions/workflows/ci.yml/badge.svg)](https://github.com/VatsalSivaratri/passline/actions/workflows/ci.yml)
+
 Record video of your building. Get a professional ADA compliance report.
 
 ## Project Description

@@ -15,3 +15,4 @@ torchvision>=0.18.0
 # DepthAnything V2 — install from source:
 # git clone https://github.com/DepthAnything/Depth-Anything-V2
 # pip install -e ./Depth-Anything-V2
+pyyaml>=6.0

@@ -1,0 +1,9 @@
+# What the test suite needs, without torch or model weights.
+pytest==8.*
+ruff==0.6.*
+numpy>=1.26,<3
+opencv-python-headless>=4.9
+pydantic>=2.7
+pyyaml>=6.0
+python-dotenv>=1.0
+google-genai>=1.0

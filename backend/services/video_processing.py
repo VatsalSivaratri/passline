@@ -2,7 +2,7 @@
 Step 3: Video → Key Frames
 
 FFmpeg extracts frames at 2fps, then:
-1. Blur filter (Laplacian variance < 100 → discard)
+1. Blur filter (sharpness far below its temporal neighbors → discard)
 2. Duplicate filter (SSIM > 0.92 between consecutive → discard later)
 3. Keep 3-12 most distinct frames
 """
@@ -30,6 +30,37 @@ logger = logging.getLogger(__name__)
 
 class VideoProcessingError(Exception):
     pass
+
+
+# Blur filter. Variance of the Laplacian measures focus AND texture: a blank wall
+# scores as low as a smeared frame. A fixed threshold therefore drops textureless
+# frames, which still matter (a bare wall is evidence that a grab bar is absent).
+# So a frame is judged against its neighbors in time, which show similar content.
+SHARPNESS_LONG_SIDE = 960     # measure at a fixed size so scores don't depend on resolution
+SHARPNESS_RATIO = 0.5         # blurry = under half the median of its neighbors
+SHARPNESS_NEIGHBORS = 2       # frames on each side
+TEXTURELESS_FLOOR = 15.0      # below this there is too little texture to judge; keep the frame
+# Ratio and floor were set on one 14 s walkthrough (drops 3 motion-blurred frames of 28,
+# keeps 4 blank-wall frames). Revisit when more recordings exist.
+
+
+def sharpness(gray: np.ndarray) -> float:
+    """Variance of the Laplacian on a copy resized to SHARPNESS_LONG_SIDE."""
+    scale = SHARPNESS_LONG_SIDE / max(gray.shape)
+    small = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    return float(cv2.Laplacian(small, cv2.CV_64F).var())
+
+
+def blurry_mask(scores: List[float]) -> List[bool]:
+    """True where a frame is much less sharp than its temporal neighbors."""
+    out = []
+    for i, s in enumerate(scores):
+        nb = scores[max(0, i - SHARPNESS_NEIGHBORS):i] + scores[i + 1:i + 1 + SHARPNESS_NEIGHBORS]
+        if not nb or s < TEXTURELESS_FLOOR:
+            out.append(False)  # nothing to compare against, or too little texture to judge
+        else:
+            out.append(s < SHARPNESS_RATIO * float(np.median(nb)))
+    return out
 
 
 def _ssim(a: np.ndarray, b: np.ndarray) -> float:
@@ -109,11 +140,11 @@ async def extract_key_frames(video_path: str, audit_id: str, module_id: str) -> 
         if img is not None:
             frames.append((p, img))
 
-    # Step 2: Convert frames to include grayscale for deduplication
-    sharp_frames = []
-    for path, img in frames:
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        sharp_frames.append((path, img, gray))
+    # Step 2: Drop motion-blurred frames
+    grays = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for _, img in frames]
+    blurry = blurry_mask([sharpness(g) for g in grays])
+    sharp_frames = [(p, img, g) for (p, img), g, b in zip(frames, grays, blurry) if not b]
+    logger.info(f"Blur filter dropped {sum(blurry)} of {len(frames)} frames")
 
     if len(sharp_frames) < MIN_FRAMES:
         raise VideoProcessingError(

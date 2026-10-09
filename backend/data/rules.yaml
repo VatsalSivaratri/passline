@@ -1,0 +1,684 @@
+# Passline rule set: one entry per check, each citing its 2010 ADA Standards section.
+# Generated from the original Python rules (services/feature_rules.py) and checked
+# equal to them by tests/test_rules_engine.py. Edit this file, not Python.
+# Conditions read Gemini-observed properties; measured rules come in a later phase.
+# Ops: eq, in, is (true/false), is_not, gt. 'all' = every clause, 'any' = at least one.
+# remediation_cost_usd ranges are unsourced placeholders carried over from the hackathon.
+
+- id: door_width_narrow
+  feature_type: door
+  section: 404.2.3
+  element: Door
+  severity: critical
+  when:
+    all:
+    - field: width_relative
+      op: eq
+      value: narrow
+  finding: Door appears too narrow for wheelchair passage (minimum 32" clear width required).
+  remediation_cost_usd:
+  - 700
+  - 2500
+- id: door_hardware_knob
+  feature_type: door_hardware
+  section: 404.2.7
+  element: Door Hardware
+  severity: high
+  when:
+    all:
+    - field: handle_type
+      op: in
+      value:
+      - round_knob
+      - knob
+  finding: Round knob hardware requires tight grasp; lever-style hardware required.
+  remediation_cost_usd:
+  - 75
+  - 200
+- id: door_threshold_raised
+  feature_type: door_threshold
+  section: 404.2.5
+  element: Door Threshold
+  severity: medium
+  when:
+    all:
+    - field: appears_raised
+      op: is
+      value: true
+  finding: Threshold appears raised above ½" maximum; may impede wheelchair travel.
+  remediation_cost_usd:
+  - 200
+  - 600
+- id: door_closer_inward
+  feature_type: door_closer
+  section: 404.2.8
+  element: Door Closer
+  severity: low
+  when:
+    all:
+    - field: present
+      op: is
+      value: true
+    - field: swing_direction
+      op: eq
+      value: inward
+  finding: Inward-swinging door with closer may be difficult for wheelchair users; check closing speed.
+  remediation_cost_usd:
+  - 150
+  - 400
+- id: toilet_height
+  feature_type: toilet
+  section: '604.4'
+  element: Toilet
+  severity: medium
+  when:
+    all:
+    - field: height_relative
+      op: in
+      value:
+      - high
+      - low
+  finding: Toilet seat height appears {height_relative}; accessible range is 17"–19" from floor.
+  remediation_cost_usd:
+  - 500
+  - 2000
+- id: toilet_grab_bar_missing
+  feature_type: toilet_grab_bar
+  section: '604.5'
+  element: Toilet Grab Bar
+  severity: critical
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: No grab bars detected at toilet; grab bars are required on side and rear walls.
+  remediation_cost_usd:
+  - 300
+  - 900
+- id: toilet_grab_bar_one_side
+  feature_type: toilet_grab_bar
+  section: 604.5.1
+  element: Toilet Grab Bar
+  severity: high
+  when:
+    all:
+    - field: present
+      op: is_not
+      value: false
+    - field: both_sides
+      op: is
+      value: false
+  finding: Grab bar detected on only one side; both side and rear grab bars are required.
+  remediation_cost_usd:
+  - 200
+  - 600
+- id: sink_height_high
+  feature_type: sink
+  section: '606.3'
+  element: Sink
+  severity: high
+  when:
+    all:
+    - field: height_relative
+      op: eq
+      value: high
+  finding: Sink rim appears too high; maximum 34" height required for accessibility.
+  remediation_cost_usd:
+  - 400
+  - 1500
+- id: sink_faucet_knob
+  feature_type: sink_faucet
+  section: '606.4'
+  element: Sink Faucet
+  severity: high
+  when:
+    all:
+    - field: faucet_type
+      op: in
+      value:
+      - knob
+      - round_knob
+  finding: Round knob faucet requires tight grasp; lever or sensor faucet required.
+  remediation_cost_usd:
+  - 100
+  - 350
+- id: sink_knee_clearance
+  feature_type: sink_clearance
+  section: '606.2'
+  element: Sink Clearance
+  severity: high
+  when:
+    all:
+    - field: knee_clearance_present
+      op: is
+      value: false
+  finding: Knee and toe clearance not visible below sink; 27" knee clearance required.
+  remediation_cost_usd:
+  - 500
+  - 2000
+- id: mirror_height_high
+  feature_type: mirror
+  section: '603.3'
+  element: Mirror
+  severity: low
+  when:
+    all:
+    - field: height_relative
+      op: eq
+      value: high
+  finding: Mirror bottom edge appears too high; maximum 40" height required over accessible sinks.
+  remediation_cost_usd:
+  - 50
+  - 150
+- id: grab_bar_missing
+  feature_type: grab_bar
+  section: '604.5'
+  element: Grab Bar
+  severity: medium
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: Grab bar absent in area where one is required.
+  remediation_cost_usd:
+  - 200
+  - 600
+- id: handrail_missing
+  feature_type: handrail
+  section: '505.2'
+  element: Handrail
+  severity: critical
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: No handrail detected; handrails are required on both sides of stairs and ramps.
+  remediation_cost_usd:
+  - 400
+  - 1200
+- id: handrail_one_side
+  feature_type: handrail
+  section: '505.3'
+  element: Handrail
+  severity: high
+  when:
+    all:
+    - field: present
+      op: is_not
+      value: false
+    - field: both_sides
+      op: is
+      value: false
+  finding: Handrail visible on one side only; handrails required on both sides.
+  remediation_cost_usd:
+  - 300
+  - 800
+- id: handrail_no_extension
+  feature_type: handrail
+  section: '505.10'
+  element: Handrail
+  severity: medium
+  when:
+    all:
+    - field: present
+      op: is_not
+      value: false
+    - field: extension_present
+      op: is
+      value: false
+  finding: Handrail extension beyond top/bottom of stair not visible; 12" extension required.
+  remediation_cost_usd:
+  - 300
+  - 900
+- id: stair_no_handrail
+  feature_type: stair
+  section: '504.6'
+  element: Stair
+  severity: critical
+  when:
+    any:
+    - field: handrail
+      op: is
+      value: false
+    - field: handrails_present
+      op: is
+      value: false
+  finding: Stair without handrails detected; handrails required on both sides.
+  remediation_cost_usd:
+  - 400
+  - 1200
+- id: stair_nosing_missing
+  feature_type: stair_nosing
+  section: '504.5'
+  element: Stair Nosing
+  severity: medium
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: Stair nosing not detected; nosings must be non-projecting and contrast with tread.
+  remediation_cost_usd:
+  - 200
+  - 800
+- id: tactile_strip_missing
+  feature_type: tactile_warning_strip
+  section: '705'
+  element: Tactile Warning Strip
+  severity: high
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: Tactile detectable warning surface not visible at top of stairs or ramp.
+  remediation_cost_usd:
+  - 300
+  - 1000
+- id: ramp_no_handrails
+  feature_type: ramp
+  section: '405.8'
+  element: Ramp
+  severity: critical
+  when:
+    all:
+    - field: handrails_present
+      op: is
+      value: false
+  finding: Ramp detected without handrails; handrails required when rise exceeds 6".
+  remediation_cost_usd:
+  - 400
+  - 1200
+- id: ramp_steep_slope
+  feature_type: ramp
+  section: '405.2'
+  element: Ramp
+  severity: critical
+  when:
+    all:
+    - field: slope_apparent
+      op: eq
+      value: steep
+  finding: Ramp slope appears to exceed the 1:12 maximum ratio.
+  remediation_cost_usd:
+  - 2000
+  - 8000
+- id: ramp_poor_surface
+  feature_type: ramp
+  section: '402.1'
+  element: Ramp
+  severity: high
+  when:
+    all:
+    - field: surface_condition
+      op: in
+      value:
+      - loose
+      - uneven
+      - cracked
+  finding: Ramp surface appears {surface_condition}; stable, firm, and slip-resistant surface required.
+  remediation_cost_usd:
+  - 500
+  - 3000
+- id: curb_cut_missing
+  feature_type: curb_cut
+  section: '406'
+  element: Curb Cut
+  severity: critical
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: No curb cut detected; curb ramps required at all pedestrian crossings.
+  remediation_cost_usd:
+  - 800
+  - 3000
+- id: hallway_width_narrow
+  feature_type: hallway
+  section: 403.5.1
+  element: Corridor
+  severity: critical
+  when:
+    all:
+    - field: width_relative
+      op: eq
+      value: narrow
+  finding: Corridor appears narrower than the 36" minimum clear width.
+  remediation_cost_usd:
+  - 1500
+  - 8000
+- id: hallway_poor_surface
+  feature_type: hallway
+  section: '402.1'
+  element: Corridor
+  severity: high
+  when:
+    all:
+    - field: surface_condition
+      op: in
+      value:
+      - uneven
+      - cracked
+      - slippery
+  finding: Corridor floor surface appears {surface_condition}; stable, firm surface required.
+  remediation_cost_usd:
+  - 500
+  - 2000
+- id: floor_surface_condition
+  feature_type: floor_surface
+  section: '402.1'
+  element: Floor Surface
+  severity: medium
+  when:
+    all:
+    - field: surface_condition
+      op: in
+      value:
+      - loose
+      - uneven
+      - cracked
+      - thick_carpet
+  finding: Floor surface appears {surface_condition}; accessible routes require firm, stable, slip-resistant surfaces.
+  remediation_cost_usd:
+  - 300
+  - 2000
+- id: parking_no_accessible_spaces
+  feature_type: parking_space
+  section: '208.2'
+  element: Parking Space
+  severity: critical
+  when:
+    all:
+    - field: count
+      op: eq
+      value: 0
+  finding: No accessible parking spaces detected; at least one accessible space required.
+  remediation_cost_usd:
+  - 500
+  - 1500
+- id: parking_no_van_accessible
+  feature_type: parking_space
+  section: 208.2.4
+  element: Parking Space
+  severity: high
+  when:
+    all:
+    - field: count
+      op: gt
+      value: 0
+      default: 1
+    - field: van_accessible
+      op: is
+      value: false
+  finding: Van-accessible space not detected; one van-accessible space required per accessible lot.
+  remediation_cost_usd:
+  - 300
+  - 1000
+- id: parking_sign_no_isa
+  feature_type: parking_sign
+  section: '502.6'
+  element: Parking Sign
+  severity: critical
+  when:
+    all:
+    - field: isa_present
+      op: is
+      value: false
+  finding: Accessible parking sign without ISA symbol detected; sign must display International Symbol of Accessibility.
+  remediation_cost_usd:
+  - 100
+  - 400
+- id: parking_aisle_missing
+  feature_type: parking_access_aisle
+  section: '502.3'
+  element: Parking Access Aisle
+  severity: critical
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: Access aisle not detected adjacent to accessible parking space.
+  remediation_cost_usd:
+  - 300
+  - 1000
+- id: parking_aisle_narrow
+  feature_type: parking_access_aisle
+  section: '502.3'
+  element: Parking Access Aisle
+  severity: high
+  when:
+    all:
+    - field: present
+      op: is_not
+      value: false
+    - field: width_relative
+      op: eq
+      value: narrow
+  finding: Access aisle appears too narrow; 60" minimum (96" for van) required.
+  remediation_cost_usd:
+  - 300
+  - 800
+- id: curb_ramp_missing
+  feature_type: curb_ramp
+  section: '406'
+  element: Curb Ramp
+  severity: critical
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: Curb ramp absent; required at transitions between sidewalk and road.
+  remediation_cost_usd:
+  - 800
+  - 3000
+- id: curb_ramp_steep
+  feature_type: curb_ramp
+  section: '406.1'
+  element: Curb Ramp
+  severity: high
+  when:
+    all:
+    - field: present
+      op: is_not
+      value: false
+    - field: slope_apparent
+      op: eq
+      value: steep
+  finding: Curb ramp slope appears to exceed the 1:12 maximum ratio.
+  remediation_cost_usd:
+  - 500
+  - 2000
+- id: counter_no_accessible_section
+  feature_type: counter
+  section: '904.4'
+  element: Service Counter
+  severity: high
+  when:
+    all:
+    - field: height_relative
+      op: eq
+      value: high
+    - field: accessible_section_present
+      op: is
+      value: false
+  finding: Counter is high with no accessible lowered section; a portion at 28"–34" height is required.
+  remediation_cost_usd:
+  - 1200
+  - 4000
+- id: service_window_high
+  feature_type: service_window
+  section: 904.4.1
+  element: Service Window
+  severity: high
+  when:
+    all:
+    - field: height_relative
+      op: eq
+      value: high
+  finding: Service window appears too high for seated users; maximum 48" reach height required.
+  remediation_cost_usd:
+  - 500
+  - 2000
+- id: checkout_no_accessible_lane
+  feature_type: checkout_lane
+  section: '904.3'
+  element: Checkout Counter
+  severity: high
+  when:
+    all:
+    - field: accessible_lane_present
+      op: is
+      value: false
+  finding: No accessible checkout lane detected; at least one accessible lane required.
+  remediation_cost_usd:
+  - 1000
+  - 4000
+- id: signage_height
+  feature_type: signage
+  section: 703.4.1
+  element: Signage
+  severity: medium
+  when:
+    all:
+    - field: height_relative
+      op: in
+      value:
+      - low
+      - high
+  finding: Sign appears mounted {height_relative}; signs must be 48"–60" to center line.
+  remediation_cost_usd:
+  - 50
+  - 200
+- id: braille_missing
+  feature_type: braille_signage
+  section: '703.3'
+  element: Braille Signage
+  severity: high
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: Braille not detected on room identification sign; Grade 2 Braille required on tactile signs.
+  remediation_cost_usd:
+  - 100
+  - 400
+- id: exit_sign_high
+  feature_type: exit_sign
+  section: '703.4'
+  element: Exit Sign
+  severity: low
+  when:
+    all:
+    - field: height_relative
+      op: eq
+      value: high
+  finding: Exit sign may be mounted outside the 80" maximum head-clearance zone.
+  remediation_cost_usd:
+  - 50
+  - 150
+- id: elevator_door_narrow
+  feature_type: elevator_door
+  section: 407.3.3
+  element: Elevator Door
+  severity: critical
+  when:
+    all:
+    - field: width_relative
+      op: eq
+      value: narrow
+  finding: Elevator door appears too narrow; minimum 36" clear opening required.
+  remediation_cost_usd:
+  - 2000
+  - 8000
+- id: elevator_button_high
+  feature_type: elevator_button
+  section: 407.4.6
+  element: Elevator Button
+  severity: high
+  when:
+    all:
+    - field: height_relative
+      op: eq
+      value: high
+  finding: Elevator call button appears above the 48" maximum reach height.
+  remediation_cost_usd:
+  - 500
+  - 2000
+- id: elevator_interior_tight
+  feature_type: elevator_interior
+  section: 407.4.1
+  element: Elevator Interior
+  severity: critical
+  when:
+    all:
+    - field: clearance_relative
+      op: eq
+      value: tight
+  finding: Elevator interior appears too small; minimum 51"×68" floor area required.
+  remediation_cost_usd:
+  - 5000
+  - 20000
+- id: drinking_fountain_no_hi_lo
+  feature_type: drinking_fountain
+  section: '211.2'
+  element: Drinking Fountain
+  severity: high
+  when:
+    all:
+    - field: hi_lo_present
+      op: is
+      value: false
+  finding: High-low drinking fountain pair not detected; a hi-lo configuration is required to serve both standing
+    and wheelchair users.
+  remediation_cost_usd:
+  - 800
+  - 3000
+- id: drinking_fountain_knee_clearance
+  feature_type: drinking_fountain
+  section: '602.2'
+  element: Drinking Fountain
+  severity: medium
+  when:
+    all:
+    - field: knee_clearance_present
+      op: is
+      value: false
+  finding: Knee clearance not visible beneath wheelchair-accessible fountain spout.
+  remediation_cost_usd:
+  - 300
+  - 1000
+- id: bench_missing
+  feature_type: bench
+  section: '903'
+  element: Bench
+  severity: medium
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: No bench detected in changing or waiting area; a bench with back support is required.
+  remediation_cost_usd:
+  - 200
+  - 800
+- id: pool_lift_missing
+  feature_type: pool_lift
+  section: '242.2'
+  element: Pool Lift
+  severity: critical
+  when:
+    all:
+    - field: present
+      op: is
+      value: false
+  finding: No pool lift detected; a means of accessible entry/exit is required for swimming pools.
+  remediation_cost_usd:
+  - 3000
+  - 10000
