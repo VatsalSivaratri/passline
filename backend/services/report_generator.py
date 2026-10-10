@@ -3,7 +3,7 @@ Step 7: Report Generation
 
 1. Deduplicates violations across modules
 2. Sorts by severity
-3. Calls Claude API for narrative text per violation
+3. Calls an OpenAI-compatible LLM endpoint (AnvilGPT) for narrative text per violation
 4. Generates PDF
 5. Stores report in MongoDB
 """
@@ -81,7 +81,7 @@ def sum_remediation(violations: List[dict]) -> dict:
 # ---------------------------------------------------------------------------
 
 def _generate_narrative_sync(violation: dict, facility: dict) -> dict:
-    """Synchronous Featherless API call. Run in thread pool for async contexts."""
+    """Synchronous LLM API call. Run in thread pool for async contexts."""
     prompt = (
         f"Violation data:\n"
         f"- ADA Section: {violation.get('code', 'N/A')}\n"
@@ -131,7 +131,7 @@ def _generate_narrative_sync(violation: dict, facility: dict) -> dict:
 
 
 async def generate_narratives(violations: List[dict], facility: dict) -> List[dict]:
-    """Generate Claude narrative for each violation concurrently (max 5 at a time)."""
+    """Generate LLM narrative for each violation concurrently (max 5 at a time)."""
     semaphore = asyncio.Semaphore(5)
 
     async def _one(v: dict) -> dict:

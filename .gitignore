@@ -39,3 +39,5 @@ bench/_tmp/
 *.mov
 
 
+
+.DS_Store

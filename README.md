@@ -1,128 +1,158 @@
-# PASSLINE — ADA Compliance Self-Audit
+# Passline
 
 [![CI](https://github.com/VatsalSivaratri/passline/actions/workflows/ci.yml/badge.svg)](https://github.com/VatsalSivaratri/passline/actions/workflows/ci.yml)
 
-Record video of your building. Get a professional ADA compliance report.
+Passline turns a phone walkthrough video of a building into an ADA accessibility pre-screening report: which elements were found, which rules from the 2010 ADA Standards for Accessible Design they may not meet, and the evidence frames behind each finding.
 
-## Project Description
-Passline is an ADA (Americans with Disabilities Act) compliance audit tool built to streamline accessibility inspections for buildings and commercial properties. Traditional ADA audits require expensive consultants and time-consuming on-site assessments
+First place overall at HackIndy 2026, built by Vatsal Sivaratri, Shrey Sharma, Sneha Chavan and Adwaiy Ranjith. Developed further since by Vatsal Sivaratri.
 
-Passline lowers that barrier by guiding auditors through a simple, video-based inspection workflow.
+> **Pre-screening only.** Passline points out likely barriers so an owner knows where to look first. It is not a certified inspection, a compliance determination, or legal advice.
 
-Auditors start on a dashboard where they can create a new audit or review past ones. To begin, they enter basic property information, building type, year built, and available features like parking and elevators. The tool then prompts the auditor to upload video walkthroughs of the property. Passline automatically classifies each space from the footage — identifying areas such as entrances, restrooms, corridors, parking lots, service counters, elevators, stairs, ramps, and signage, with no manual categorization required.
+## Why
 
-Each classified space is analyzed against ADA standards. The system flags violations and warnings with specific ADA code citations (e.g., ADA Standards §404.2.3), estimated remediation costs, and detailed descriptions. Finally, a generated compliance report summarizes the findings with an overall compliance score and total cost range for remediation — printable as a PDF.
+Many buildings that predate the ADA Standards still lack accessible features, and a professional audit is expensive enough that most small properties never get one. Passline is meant to be the cheap first pass: record each space on a phone, get a prioritized list of what to check.
 
-## Quick Start
+## How it works
+
+```
+Phone video (per space)
+  │
+  ├─ FFmpeg ............... extract frames at 2 fps
+  ├─ Blur filter .......... drop frames much less sharp than their neighbors in time
+  ├─ SSIM ................. drop near-duplicates, keep up to 20 distinct key frames
+  ├─ Calibration .......... find a credit card or letter paper; pixels per inch
+  ├─ Gemini ............... classify the space; detect ADA-relevant features
+  │                         (schema-constrained JSON, temperature 0)
+  ├─ Depth Anything V2 .... metric depth map per frame (PyTorch or ONNX INT8)
+  ├─ Rule engine .......... evaluate features against data/rules.yaml
+  └─ Report ............... LLM-written descriptions per finding, PDF via ReportLab
+```
+
+Results are stored in MongoDB; the Next.js frontend polls processing status and shows findings with annotated frames and depth maps.
+
+### Current state
+
+| Stage | Status |
+| --- | --- |
+| Frame extraction, blur filter, SSIM dedup | Working, tested |
+| Reference-object calibration | Working on synthetic 4K tests; not yet validated on real footage with a reference object |
+| Metric depth (PyTorch and ONNX INT8) | Working, benchmarked; ONNX parity tested |
+| Feature detection and room classification (Gemini) | Working; failures raise errors instead of returning defaults |
+| Rule engine | 45 rules citing 40 sections of the 2010 Standards; rules evaluate model-observed properties |
+| Depth-based measurements feeding rules | **Not yet.** Depth maps are computed but no measured value reaches a rule |
+| Required-element checks per space type, confidence tiers | Designed, not built |
+
+## Results
+
+All numbers come from scripts in this repo; the output files are committed.
+
+**Depth model export** (`tools/bench_depth.py`, results in `bench/results.json`). Depth Anything V2 metric ViT-S (Hypersim), 518 x 518 input, 50 frames from one walkthrough, Apple M1 Pro, 6 threads, 3 passes with rotated order; run-to-run spread under 1%.
+
+| Backend | Size | Median latency | Peak memory | Load time |
+| --- | --- | --- | --- | --- |
+| PyTorch FP32 | 99.2 MB | 221 ms | 1510 MB | 1.9 s |
+| ONNX FP32 | 98.9 MB | 350 ms | 666 MB | 0.14 s |
+| ONNX INT8 (dynamic) | 35.4 MB | 251 ms | 614 MB | 0.09 s |
+
+INT8 versus PyTorch FP32 depth: AbsRel 2.47%, MAE 3.8 cm, worst frame 10.6% (median scene depth 1.8 m). ONNX FP32 matches PyTorch exactly. INT8 is faster than ONNX FP32 but not faster than PyTorch on this CPU; see `DECISIONS.md`.
+
+**Calibration** (`backend/tests/test_calibration.py`). On synthetic 4K frames with motion blur and sensor noise, the original detector found nothing (the outline broke into open contours of about 5 px² against an 83,000 px² threshold). The multi-scale detector finds the reference in all 15 degraded cases, with scale error at most 1.2% for letter paper and 3.5% for a dark card, and reported no false positives on 14 real frames. Known miss: a low-contrast card, kept as an expected failure.
+
+**Rules** (`backend/tests/test_rules_engine.py`). The 45 original Python rules were converted to YAML by an AST script and checked identical to the originals on every rule and on 20,000 random inputs.
+
+**Blur filter** (`backend/tests/test_blur_filter.py`). Judges each frame against its neighbors because a fixed threshold also drops blank walls, which still count as coverage. On the test walkthrough it drops the 3 motion-blurred frames of 28 and keeps all 4 wall frames.
+
+## Quickstart
+
+**Prerequisites:** Python 3.12, Node 18+, FFmpeg (`brew install ffmpeg` or `sudo apt install ffmpeg`), and MongoDB (local `mongod` or an Atlas cluster).
 
 ### Backend
 
 ```bash
-cd backend
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt onnx onnxruntime onnxscript pytest
 
-# Create virtualenv
-python3 -m venv venv && source venv/bin/activate
+# Depth model code and metric checkpoint (~99 MB)
+git clone https://github.com/DepthAnything/Depth-Anything-V2 backend/Depth-Anything-V2
+mkdir -p backend/checkpoints
+curl -L -o backend/checkpoints/depth_anything_v2_metric_hypersim_vits.pth \
+  https://huggingface.co/depth-anything/Depth-Anything-V2-Metric-Hypersim-Small/resolve/main/depth_anything_v2_metric_hypersim_vits.pth
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Install FFmpeg (required for video processing)
-# Ubuntu: sudo apt install ffmpeg
-# macOS:  brew install ffmpeg
-
-# Install DepthAnything V2 (optional — falls back to placeholder if unavailable)
-git clone https://github.com/DepthAnything/Depth-Anything-V2
-# No install step needed — depth_estimation.py adds this repo to sys.path
-# Download ViT-S checkpoint:
-# https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth
-# Place at: backend/checkpoints/depth_anything_v2_vits.pth
-mkdir -p checkpoints
-curl -L -o checkpoints/depth_anything_v2_vits.pth \
-  https://huggingface.co/depth-anything/Depth-Anything-V2-Small/resolve/main/depth_anything_v2_vits.pth
-
-# Set environment variables
-cp .env.example .env
-# Edit .env with your API keys
-
-# Run
-source venv/bin/activate && uvicorn main:app --port 8000
+cp backend/.env.example backend/.env   # then fill in keys (see Configuration)
+cd backend && uvicorn main:app --port 8000
 ```
 
 ### Frontend
 
 ```bash
-cd client
-brew install node
+cd frontend
 npm install
-npm start   # Runs on http://localhost:3000
+npm run dev   # http://localhost:3000, expects the API at NEXT_PUBLIC_API_URL (default http://localhost:8000)
 ```
 
-## Environment Variables
+### Optional: ONNX depth backend
 
-```
-MONGODB_URI=mongodb+srv://...
-MONGODB_DB=passline
-GEMINI_API_KEY=...
-FEATHERLESS_API_KEY=...
-FEATHERLESS_MODEL=meta-llama/Meta-Llama-3.1-70B-Instruct
-UPLOAD_DIR=./uploads
-FRAMES_DIR=./frames
-REPORTS_DIR=./reports
-DEPTH_MODEL_PATH=./checkpoints/depth_anything_v2_vits.pth
+```bash
+python tools/export_depth_onnx.py \
+  --checkpoint backend/checkpoints/depth_anything_v2_metric_hypersim_vits.pth \
+  --da2-root backend/Depth-Anything-V2
+# writes models/dav2_fp32.onnx and models/dav2_int8.onnx; then set DEPTH_BACKEND=onnx in backend/.env
 ```
 
-## Architecture
+## Configuration
 
-```
-User records video
-    ↓
-Frontend (React) → POST /upload → FastAPI
-    ↓
-FFmpeg: extract frames at 2fps
-    ↓
-OpenCV: SSIM deduplication → 3-20 key frames
-    ↓
-OpenCV: Canny + contour → reference object calibration (pixels/inch)
-    ↓
-Gemini 2.5 Flash: room classification (34 room types)
-    ↓                                      ↓
-Gemini 2.5 Flash:              module-level ADA rule set
-universal feature detection    (Pass B — driven by room type)
-(40 feature types)
-    ↓
-feature-level ADA rule set
-(Pass A — driven by detected features)
-    ↓
-Violations from both passes merged + deduped
-    ↓
-DepthAnything V2 ViT-S: metric depth maps + measurements
-    ↓
-Featherless LLM (Llama 3.1 70B): narrative descriptions for each violation
-    ↓
-ReportLab: PDF generation
-    ↓
-MongoDB: audit document storage
-    ↓
-Frontend polls /status → displays report
+Set in `backend/.env` (template in `backend/.env.example`). Never commit `.env`.
+
+| Variable | Purpose |
+| --- | --- |
+| `MONGODB_URI`, `MONGODB_DB` | Database; `mongodb://localhost:27017` for local |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Feature detection and room classification |
+| `ANVILGPT_API_KEY`, `ANVILGPT_BASE_URL`, `ANVILGPT_MODEL` | OpenAI-compatible endpoint for report text |
+| `DEPTH_BACKEND` | `torch` (default) or `onnx` |
+| `DEPTH_MODEL_PATH`, `DA2_ROOT`, `DEPTH_ONNX_PATH` | Depth checkpoint, Depth-Anything-V2 clone, exported ONNX file |
+| `UPLOAD_DIR`, `FRAMES_DIR`, `REPORTS_DIR` | Local storage for videos, frames, PDFs |
+
+## Tests and tools
+
+```bash
+cd backend && pytest tests -q
 ```
 
-## Multimodal Compliance Analysis
+87 tests. CI runs everything except the 3 depth parity tests, which need model weights.
 
-The pipeline sends the same video frames to Gemini twice for two independent signals:
+| Tool | What it does |
+| --- | --- |
+| `tools/export_depth_onnx.py` | Export the depth model to ONNX FP32 and INT8 |
+| `tools/bench_depth.py` | Size, latency, memory and depth agreement across backends, with provenance |
+| `tools/gemini_determinism.py` | Run detection repeatedly on the same frames; compare settings and resulting findings |
 
-1. **Feature detection** — identifies every ADA-relevant element visible in the video (doors, grab bars, ramps, signage, etc.) across a 40-type closed enum. Each detected feature is evaluated against feature-level ADA rules (Pass A).
+## Repository layout
 
-2. **Room classification** — identifies the room type from the same frames (one of 34 types: restroom, hallway, parking, elevator, etc.). The classified type drives a separate set of whole-room ADA rules (Pass B) covering requirements that may not be visible as individual features — for example, a restroom classification triggers required grab-bar checks even if no grab bar appears in the video.
+```
+backend/
+  main.py                FastAPI app
+  routers/               audits, modules (upload + processing pipeline), reports
+  services/              video_processing, calibration, depth_backends, depth_estimation,
+                         gemini_analysis, rules_engine, report_generator
+  data/rules.yaml        rule set, one entry per check with its ADA section
+  tests/                 pytest suite
+frontend/                Next.js app: questionnaire, capture, processing, report
+tools/                   export, benchmark and experiment scripts
+bench/                   committed benchmark results
+DECISIONS.md             why each design decision was made, with evidence
+SPEC.md                  API, data model, pipeline stages and rule format
+RUNNING.md               running locally, troubleshooting, running experiments
+```
 
-Violations from both passes are merged and deduplicated into a single list per room.
+## Limitations
 
-## Processing Pipeline Risk Tiers
+- Rules read properties the vision model reports ("door appears narrow"), not measured dimensions. Depth is computed but not yet turned into measurements.
+- Calibration has been tested on synthetic frames only. Shape alone cannot tell a card from other card-shaped rectangles.
+- Gemini output can vary between runs on identical input; temperature 0 and a response schema reduce this, and `tools/gemini_determinism.py` measures it.
+- Rule section numbers come from the original implementation and still need checking against the official 2010 Standards text.
+- Elements such as door opening force, surface slip resistance and braille correctness cannot be judged from video.
+- Frames are sent to Google's Gemini API. Video metadata (including location) is not yet stripped.
 
-1. **Best**: Reference object detected → pixel calibration → accurate inch measurements
-2. **Good**: No reference, metric depth model → flagged as "estimated"
-3. **Fallback**: Gemini relative classifications only → flagged as "screening estimate"
-4. **Demo floor**: Feature-presence rules only (no measurements needed)
+## Next
 
-## AI Usage
-
-Anthropic Claude Code (Opus 4.6) was used for integration of front and backend, construction of README.md and SPEC.md, backend construction, and various bug fixes.
+Measured dimensions from depth and camera intrinsics, with uncertainty and a guard band around each threshold; required-element checks per space type with coverage; per-instance findings in place of a single score; a validation study against tape-measured dimensions.
