@@ -1,209 +1,147 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
 import { getAudit, triggerReport } from "@/lib/api";
+import { SPACE_GROUPS, spaceInfo } from "@/lib/spaces";
+import AuditSteps from "@/components/AuditSteps";
+import Notice from "@/components/Notice";
 
-const MODULE_META: Record<string, { icon: string; title: string; desc: string }> = {
-  // Universal
-  entrance:         { icon: "🚪", title: "Entrance / Door",         desc: "Door width, hardware, threshold, signage, ramps" },
-  hallway:          { icon: "🛤️", title: "Hallway / Corridor",      desc: "Width, obstructions, floor surface, signage" },
-  restroom:         { icon: "🚻", title: "Restroom",                 desc: "Grab bars, faucet, door swing, clearance, mirror" },
-  parking:          { icon: "🅿️", title: "Parking Lot",             desc: "Accessible spaces, signage, access aisles, curb ramps" },
-  elevator:         { icon: "🛗", title: "Elevator",                 desc: "Call button height, cab size, controls, braille" },
-  stairway:         { icon: "🪜", title: "Stairs & Handrails",       desc: "Handrail height, extensions, nosing contrast" },
-  signage:          { icon: "🪧", title: "Signage & Wayfinding",     desc: "Height, braille, high contrast, mounting location" },
-  drinking_fountain:{ icon: "💧", title: "Drinking Fountain",        desc: "Spout height, knee clearance, hi-lo units" },
-  // Dining / Food Service
-  dining:           { icon: "🍽️", title: "Dining Area",             desc: "Table heights, aisle widths, accessible seating" },
-  counter:          { icon: "🏪", title: "Service Counter",          desc: "Counter height, accessible section, approach clearance" },
-  outdoor_seating:  { icon: "🌿", title: "Outdoor Seating",          desc: "Surface, route from entrance, accessible tables" },
-  cafeteria:        { icon: "🥗", title: "Cafeteria / Dining Hall",  desc: "Food line height, tray slide, aisle widths" },
-  concession:       { icon: "🍿", title: "Concession Stand",         desc: "Counter height, accessible section, queue setup" },
-  // Retail
-  sales_floor:      { icon: "🛍️", title: "Sales Floor & Aisles",    desc: "Aisle width, protruding displays, accessible route" },
-  checkout:         { icon: "🧾", title: "Checkout Counter",         desc: "Counter height, PIN pad reach, queue width" },
-  fitting_room:     { icon: "👗", title: "Fitting Room",             desc: "Door width, turning space, bench height" },
-  // Office / Professional
-  reception:        { icon: "🗂️", title: "Reception Desk",          desc: "Counter height, accessible section, approach space" },
-  conference_room:  { icon: "💼", title: "Conference Room",          desc: "Door width, table height, knee clearance, turning space" },
-  break_room:       { icon: "☕", title: "Break Room / Kitchen",     desc: "Counter heights, sink clearance, appliance reach" },
-  // Medical / Healthcare
-  waiting_room:     { icon: "🪑", title: "Waiting Room",             desc: "Wheelchair spaces, aisle widths, check-in counter" },
-  exam_room:        { icon: "🩺", title: "Examination Room",         desc: "Exam table height, door width, turning space" },
-  patient_room:     { icon: "🛏️", title: "Patient Room",            desc: "Bed clearance, bathroom access, call button" },
-  pharmacy:         { icon: "💊", title: "Pharmacy Counter",         desc: "Counter height, consultation window, PIN pad" },
-  // Hotel / Lodging
-  lobby:            { icon: "🏨", title: "Hotel Lobby",              desc: "Check-in desk height, route to elevator, seating" },
-  guest_room:       { icon: "🛎️", title: "Accessible Guest Room",   desc: "Bed clearance, roll-in shower, grab bars, controls" },
-  pool:             { icon: "🏊", title: "Pool & Spa Area",           desc: "Pool lift or sloped entry, deck surface, locker access" },
-  fitness_center:   { icon: "🏋️", title: "Fitness Center",          desc: "Equipment aisles, accessible machines, locker heights" },
-  // Education
-  classroom:        { icon: "📚", title: "Classroom",                desc: "Desk aisles, accessible desk, whiteboard reach" },
-  gymnasium:        { icon: "🏀", title: "Gymnasium",                desc: "Accessible seating, route to floor, locker access" },
-  auditorium:       { icon: "🎭", title: "Auditorium",               desc: "Wheelchair spaces, companion seats, stage access" },
-  library:          { icon: "📖", title: "Library",                  desc: "Aisle widths, shelf reach, study tables, checkout" },
-  // Assembly / Entertainment
-  assembly_seating: { icon: "🎪", title: "Assembly Seating",         desc: "Wheelchair spaces, companion seats, sight lines" },
-  stage:            { icon: "🎤", title: "Stage Access",             desc: "Ramp or lift, handrails, approach clearance" },
-  ticket_booth:     { icon: "🎟️", title: "Ticket / Box Office",     desc: "Counter height, accessible window, approach space" },
-};
+const PROCESSING = new Set(["uploading", "extracting_frames", "classifying", "analyzing", "checking_compliance"]);
 
-// Group modules into categories for display
-const MODULE_GROUPS: { label: string; keys: string[] }[] = [
-  { label: "Entrances & Circulation",  keys: ["entrance", "hallway", "elevator", "stairway"] },
-  { label: "Core Facilities",          keys: ["restroom", "parking", "signage", "drinking_fountain"] },
-  { label: "Dining & Food Service",    keys: ["dining", "counter", "outdoor_seating", "cafeteria", "concession"] },
-  { label: "Retail",                   keys: ["sales_floor", "checkout", "fitting_room"] },
-  { label: "Office & Professional",    keys: ["reception", "conference_room", "break_room"] },
-  { label: "Medical & Healthcare",     keys: ["waiting_room", "exam_room", "patient_room", "pharmacy"] },
-  { label: "Hotel & Lodging",          keys: ["lobby", "guest_room", "pool", "fitness_center"] },
-  { label: "Education",                keys: ["classroom", "cafeteria", "gymnasium", "auditorium", "library"] },
-  { label: "Assembly & Entertainment", keys: ["assembly_seating", "stage", "concession", "ticket_booth"] },
-];
-
-const STATUS_BADGE: Record<string, { label: string; classes: string }> = {
-  created:             { label: "Not Started",  classes: "bg-slate-100 text-slate-600" },
-  uploading:           { label: "Uploading...", classes: "bg-blue-100 text-blue-600 animate-pulse" },
-  extracting_frames:   { label: "Extracting...",classes: "bg-blue-100 text-blue-600 animate-pulse" },
-  analyzing:           { label: "Analyzing...", classes: "bg-yellow-100 text-yellow-700 animate-pulse" },
-  checking_compliance: { label: "Checking...",  classes: "bg-yellow-100 text-yellow-700 animate-pulse" },
-  complete:            { label: "Complete",      classes: "bg-green-100 text-green-700" },
-  error:               { label: "Error",         classes: "bg-red-100 text-red-600" },
-};
-
-export default function ModulesPage() {
+export default function SpacesPage() {
   const router = useRouter();
   const { id } = useParams<{ id: string }>();
   const [audit, setAudit] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [reportError, setReportError] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     async function poll() {
       try {
         const data = await getAudit(id);
-        if (!cancelled) setAudit(data);
-      } catch {}
+        if (!cancelled) { setAudit(data); setLoadError(false); }
+      } catch {
+        if (!cancelled) setLoadError(true);
+      }
       if (!cancelled) setLoading(false);
     }
     poll();
-    const interval = setInterval(poll, 4000);
-    return () => { cancelled = true; clearInterval(interval); };
+    const t = setInterval(poll, 4000);
+    return () => { cancelled = true; clearInterval(t); };
   }, [id]);
 
-  const applicableModules: string[] = audit?.applicable_modules?.length
-    ? audit.applicable_modules
-    : ["entrance", "restroom"];
+  const suggested: string[] = audit?.applicable_modules?.length ? audit.applicable_modules : ["entrance", "restroom"];
+  const byType: Record<string, any> = {};
+  for (const m of audit?.modules ?? []) byType[m.module_type] = m;
 
-  const moduleStatusMap: Record<string, any> = {};
-  for (const m of audit?.modules ?? []) {
-    moduleStatusMap[m.module_type] = m;
-  }
+  // Spaces the backend classified itself ("auto" uploads) may not be in the suggested list.
+  const extra = Object.keys(byType).filter((k) => !suggested.includes(k));
+  const groups = SPACE_GROUPS
+    .map((g) => ({ ...g, keys: g.keys.filter((k) => suggested.includes(k)) }))
+    .filter((g) => g.keys.length > 0);
+  const seen = new Set<string>();
+  const dedupedGroups = groups.map((g) => ({ ...g, keys: g.keys.filter((k) => !seen.has(k) && seen.add(k)) })).filter((g) => g.keys.length);
+  if (extra.length) dedupedGroups.push({ label: "Other recorded spaces", keys: extra });
 
-  const hasCompleted = Object.values(moduleStatusMap).some(
-    (m: any) => m.status === "complete"
-  );
+  const all = dedupedGroups.flatMap((g) => g.keys);
+  const done = all.filter((k) => byType[k]?.status === "complete").length;
 
-  async function handleGenerateReport() {
+  async function generate() {
     setGenerating(true);
+    setReportError(false);
     try {
       await triggerReport(id);
       router.push(`/audit/${id}/report`);
     } catch {
+      setReportError(true);
       setGenerating(false);
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-slate-400">
-        Loading audit...
-      </div>
-    );
-  }
-
-  // Build groups that have at least one applicable module
-  const visibleGroups = MODULE_GROUPS
-    .map((group) => ({
-      ...group,
-      keys: group.keys.filter((k) => applicableModules.includes(k)),
-    }))
-    .filter((group) => group.keys.length > 0);
-
   return (
-    <div className="max-w-2xl mx-auto">
-      <div className="mb-6">
-        <div className="text-sm text-blue-600 font-semibold mb-1">Step 2 of 3</div>
-        <h1 className="text-2xl font-bold text-slate-900">Select a Module to Audit</h1>
-        <p className="text-slate-500 mt-1">
-          Tap any area below to record or upload a video for analysis.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-8">
-        {visibleGroups.map((group) => (
-          <div key={group.label}>
-            <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
-              {group.label}
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {group.keys.map((mod) => {
-                const meta = MODULE_META[mod] ?? { icon: "📷", title: mod, desc: "" };
-                const moduleData = moduleStatusMap[mod];
-                const status = moduleData?.status ?? "created";
-                const badge = STATUS_BADGE[status] ?? STATUS_BADGE.created;
-                const violationCount = moduleData?.violations?.length ?? 0;
-
-                return (
-                  <button
-                    key={mod}
-                    onClick={() => router.push(`/audit/${id}/capture/${mod}`)}
-                    className="text-left rounded-xl border border-slate-200 bg-white p-4 shadow-sm
-                               hover:border-blue-300 hover:shadow-md transition-all active:scale-95"
-                  >
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <span className="text-2xl">{meta.icon}</span>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${badge.classes}`}>
-                        {badge.label}
-                      </span>
-                    </div>
-                    <div className="font-semibold text-slate-800 text-sm">{meta.title}</div>
-                    <div className="text-xs text-slate-500 mt-0.5">{meta.desc}</div>
-                    {status === "complete" && violationCount > 0 && (
-                      <div className="mt-2 text-xs font-semibold text-red-600 bg-red-50 px-2 py-1 rounded-md inline-block">
-                        {violationCount} violation{violationCount !== 1 ? "s" : ""} found
-                      </div>
-                    )}
-                    {status === "complete" && violationCount === 0 && (
-                      <div className="mt-2 text-xs font-semibold text-green-600 bg-green-50 px-2 py-1 rounded-md inline-block">
-                        No violations
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {hasCompleted && (
-        <div className="mt-8 flex flex-col items-center gap-2">
-          <button
-            onClick={handleGenerateReport}
-            disabled={generating}
-            className="w-full rounded-xl bg-green-700 text-white py-3 font-bold text-base
-                       hover:bg-green-800 transition-colors disabled:opacity-60"
-          >
-            {generating ? "Generating Report..." : "Generate Compliance Report"}
-          </button>
-          <p className="text-slate-400 text-sm">
-            You can add more modules before or after generating.
+    <div>
+      <AuditSteps current={1} />
+      <div className="flex flex-wrap items-end justify-between gap-6">
+        <div className="max-w-prose">
+          <h1 className="text-2xl">Record each space</h1>
+          <p className="mt-2 text-ink-2">
+            Start with entrances and the route to them; those matter most. You can generate the report
+            once one space is done and add more later.
           </p>
         </div>
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <p aria-live="polite" className="font-bold">
+            {loading ? "Loading…" : `${done} of ${all.length} spaces done`}
+          </p>
+          <button onClick={generate} disabled={done === 0 || generating} className="btn-primary">
+            {generating ? "Starting report…" : "Generate report"}
+          </button>
+        </div>
+      </div>
+
+      {loadError && (
+        <div className="mt-6"><Notice tone="error" title="Couldn’t load this audit.">The server didn’t respond. This page retries every few seconds.</Notice></div>
       )}
+      {reportError && (
+        <div className="mt-6"><Notice tone="error" title="The report didn’t start.">At least one space must finish processing first. If one has, try again.</Notice></div>
+      )}
+
+      <div className="mt-10 flex flex-col gap-10">
+        {dedupedGroups.map((g) => (
+          <section key={g.label} aria-labelledby={`g-${g.label}`}>
+            <h2 id={`g-${g.label}`} className="border-b-2 border-ink pb-2 text-lg">{g.label}</h2>
+            <ul>
+              {g.keys.map((key) => (
+                <SpaceRow key={key} auditId={id} spaceKey={key} module={byType[key]} />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     </div>
+  );
+}
+
+function SpaceRow({ auditId, spaceKey, module }: { auditId: string; spaceKey: string; module: any }) {
+  const info = spaceInfo(spaceKey);
+  const status: string = module?.status ?? "created";
+  const count: number = module?.violations?.length ?? 0;
+
+  let statusText: React.ReactNode = <span className="text-ink-2">Not recorded</span>;
+  let action = { label: "Record", href: `/audit/${auditId}/capture/${spaceKey}`, primary: true };
+
+  if (PROCESSING.has(status)) {
+    statusText = <span className="marked font-bold">Processing</span>;
+    action = { label: "View progress", href: `/audit/${auditId}/processing/${module.module_id}`, primary: false };
+  } else if (status === "complete") {
+    statusText = count > 0
+      ? <span className="font-bold text-fail">{count} possible {count === 1 ? "violation" : "violations"}</span>
+      : <span className="font-bold text-pass">No violations found</span>;
+    action = { label: "Record again", href: `/audit/${auditId}/capture/${spaceKey}`, primary: false };
+  } else if (status === "error") {
+    statusText = <span className="font-bold text-fail">Processing failed</span>;
+    action = { label: "Record again", href: `/audit/${auditId}/capture/${spaceKey}`, primary: true };
+  }
+
+  return (
+    <li className="grid gap-x-6 gap-y-2 border-b border-rule py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+      <div>
+        <h3 className="text-base font-bold">{module?.room_name || info.title}</h3>
+        {info.checks && <p className="text-sm text-ink-2">Checks: {info.checks.toLowerCase()}</p>}
+      </div>
+      <p className="text-sm sm:text-right">{statusText}</p>
+      <Link
+        href={action.href}
+        className={`${action.primary ? "btn-primary" : "btn-secondary"} min-w-[9rem]`}
+        aria-label={`${action.label}: ${module?.room_name || info.title}`}
+      >
+        {action.label}
+      </Link>
+    </li>
   );
 }

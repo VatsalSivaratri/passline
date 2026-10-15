@@ -1,32 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { submitQuestionnaire } from "@/lib/api";
+import AuditSteps from "@/components/AuditSteps";
+import Notice from "@/components/Notice";
 
 const US_STATES = [
-  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA",
-  "HI","ID","IL","IN","IA","KS","KY","LA","ME","MD",
-  "MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ",
-  "NM","NY","NC","ND","OH","OK","OR","PA","RI","SC",
-  "SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
+  "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY",
+  "LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND",
+  "OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY",
 ];
 
 const FACILITY_TYPES = [
-  { value: "restaurant", label: "Restaurant / Food Service" },
-  { value: "retail", label: "Retail Store" },
-  { value: "office", label: "Office Building" },
-  { value: "medical", label: "Medical / Healthcare" },
-  { value: "hotel", label: "Hotel / Lodging" },
-  { value: "education", label: "School / University" },
-  { value: "assembly", label: "Venue / Entertainment" },
-  { value: "other", label: "Other" },
+  { value: "restaurant", label: "Restaurant or food service" },
+  { value: "retail", label: "Retail store" },
+  { value: "office", label: "Office" },
+  { value: "medical", label: "Medical or healthcare" },
+  { value: "hotel", label: "Hotel or lodging" },
+  { value: "education", label: "School or university" },
+  { value: "assembly", label: "Venue or entertainment" },
+  { value: "other", label: "Something else" },
 ];
 
 const BUILDING_AGES = [
-  { value: "pre-1992", label: "Pre-1992 (before ADA)" },
-  { value: "1992-2012", label: "1992–2012" },
-  { value: "post-2012", label: "Post-2012" },
+  { value: "pre-1992", label: "Before 1992", hint: "Built before the ADA’s design rules took effect" },
+  { value: "1992-2012", label: "1992 to 2012", hint: "Built under the 1991 ADA Standards" },
+  { value: "post-2012", label: "After 2012", hint: "Built under the current 2010 ADA Standards" },
 ];
 
 export default function QuestionnairePage() {
@@ -36,171 +36,145 @@ export default function QuestionnairePage() {
   const [state, setState] = useState("IN");
   const [facilityType, setFacilityType] = useState("restaurant");
   const [buildingAge, setBuildingAge] = useState("pre-1992");
-  const [recentRenovation, setRecentRenovation] = useState(false);
-  const [renovationCost, setRenovationCost] = useState<string>("");
-  const [parkingSpaces, setParkingSpaces] = useState<string>("0");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [renovated, setRenovated] = useState(false);
+  const [renovationCost, setRenovationCost] = useState("");
+  const [parkingSpaces, setParkingSpaces] = useState("0");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setSubmitting(true);
-    setError(null);
-
+    setSaving(true);
+    setError(false);
     try {
       await submitQuestionnaire(id, {
         state,
         facility_type: facilityType,
         building_age: buildingAge,
-        recent_renovation: recentRenovation,
-        renovation_cost: recentRenovation && renovationCost ? parseFloat(renovationCost) : null,
+        recent_renovation: renovated,
+        renovation_cost: renovated && renovationCost ? parseFloat(renovationCost) : null,
         parking_spaces: parseInt(parkingSpaces, 10) || 0,
       });
       router.push(`/audit/${id}/modules`);
     } catch {
-      setError("Failed to save questionnaire. Please try again.");
-      setSubmitting(false);
+      setError(true);
+      setSaving(false);
     }
   }
 
   return (
-    <div className="max-w-xl mx-auto">
-      <div className="mb-6">
-        <div className="text-sm text-blue-600 font-semibold mb-1">Step 1 of 3</div>
-        <h1 className="text-2xl font-bold text-slate-900">About Your Facility</h1>
-        <p className="text-slate-500 mt-1">
-          We use this to determine which ADA rules apply to your building.
-        </p>
-      </div>
+    <div className="max-w-prose">
+      <AuditSteps current={0} />
+      <h1 className="text-2xl">About the building</h1>
+      <p className="mt-2 text-ink-2">These answers decide which spaces to record and which rules apply.</p>
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-        {/* State */}
+      <form onSubmit={handleSubmit} className="mt-10 flex flex-col gap-10">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">State</label>
-          <select
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {US_STATES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
+          <label htmlFor="state" className="block font-bold">State</label>
+          <select id="state" value={state} onChange={(e) => setState(e.target.value)} className="field mt-2 max-w-[10rem]">
+            {US_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>
 
-        {/* Facility type */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Facility Type</label>
-          <div className="grid grid-cols-2 gap-2">
+        <fieldset>
+          <legend className="font-bold">What kind of business uses the building?</legend>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
             {FACILITY_TYPES.map((f) => (
-              <label
-                key={f.value}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors
-                  ${facilityType === f.value
-                    ? "border-blue-600 bg-blue-50 text-blue-700 font-medium"
-                    : "border-slate-200 hover:border-slate-300"
-                  }`}
-              >
-                <input
-                  type="radio"
-                  name="facilityType"
-                  value={f.value}
-                  checked={facilityType === f.value}
-                  onChange={() => setFacilityType(f.value)}
-                  className="sr-only"
-                />
+              <Choice key={f.value} name="facility" value={f.value} checked={facilityType === f.value} onChange={setFacilityType}>
                 {f.label}
-              </label>
+              </Choice>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        {/* Building age */}
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-2">Building Age</label>
-          <div className="flex flex-col gap-2">
+        <fieldset>
+          <legend className="font-bold">When was it built?</legend>
+          <div className="mt-3 flex flex-col gap-2">
             {BUILDING_AGES.map((a) => (
-              <label
-                key={a.value}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 cursor-pointer transition-colors
-                  ${buildingAge === a.value
-                    ? "border-blue-600 bg-blue-50 text-blue-700 font-medium"
-                    : "border-slate-200 hover:border-slate-300"
-                  }`}
-              >
-                <input
-                  type="radio"
-                  name="buildingAge"
-                  value={a.value}
-                  checked={buildingAge === a.value}
-                  onChange={() => setBuildingAge(a.value)}
-                  className="sr-only"
-                />
+              <Choice key={a.value} name="age" value={a.value} checked={buildingAge === a.value} onChange={setBuildingAge}>
                 {a.label}
-              </label>
+                <span className="block text-sm font-normal text-ink-2">{a.hint}</span>
+              </Choice>
             ))}
           </div>
-        </div>
+        </fieldset>
 
-        {/* Recent renovation */}
         <div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div
-              onClick={() => setRecentRenovation(!recentRenovation)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors
-                ${recentRenovation ? "bg-blue-600" : "bg-slate-300"}`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform
-                  ${recentRenovation ? "translate-x-6" : "translate-x-1"}`}
-              />
-            </div>
-            <span className="text-sm font-medium text-slate-700">
-              Recent renovation in the last 3 years
-            </span>
+          <label className="flex min-h-[48px] cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={renovated}
+              onChange={(e) => setRenovated(e.target.checked)}
+              className="h-6 w-6 accent-ink"
+            />
+            <span className="font-bold">Renovated in the last 3 years</span>
           </label>
-          {recentRenovation && (
-            <div className="mt-3">
-              <label className="block text-sm text-slate-600 mb-1">
-                Approximate renovation cost ($)
-              </label>
+          {renovated && (
+            <div className="mt-3 pl-9">
+              <label htmlFor="cost" className="block">Approximate renovation cost, in dollars</label>
               <input
+                id="cost"
                 type="number"
+                inputMode="numeric"
+                min="0"
                 value={renovationCost}
                 onChange={(e) => setRenovationCost(e.target.value)}
-                placeholder="e.g. 50000"
-                className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="field mt-2 max-w-[14rem]"
               />
             </div>
           )}
         </div>
 
-        {/* Parking spaces */}
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            Total Parking Spaces{" "}
-            <span className="text-slate-400 font-normal">(0 if no parking lot)</span>
-          </label>
+          <label htmlFor="parking" className="block font-bold">Parking spaces</label>
+          <p id="parking-hint" className="text-sm text-ink-2">Enter 0 if the building has no parking lot.</p>
           <input
+            id="parking"
+            aria-describedby="parking-hint"
             type="number"
+            inputMode="numeric"
             min="0"
             value={parkingSpaces}
             onChange={(e) => setParkingSpaces(e.target.value)}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="field mt-2 max-w-[10rem]"
           />
         </div>
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
+        {error && (
+          <Notice tone="error" title="Your answers weren’t saved.">
+            The server didn’t respond. Check that it’s running, then select Continue again.
+          </Notice>
+        )}
 
-        <button
-          type="submit"
-          disabled={submitting}
-          className="w-full rounded-xl bg-blue-700 text-white py-3 font-bold text-base
-                     hover:bg-blue-800 transition-colors disabled:opacity-60"
-        >
-          {submitting ? "Saving..." : "Continue to Module Selection"}
-        </button>
+        <div>
+          <button type="submit" disabled={saving} className="btn-primary">
+            {saving ? "Saving…" : "Continue"}
+          </button>
+        </div>
       </form>
     </div>
+  );
+}
+
+function Choice({
+  name, value, checked, onChange, children,
+}: {
+  name: string; value: string; checked: boolean; onChange: (v: string) => void; children: React.ReactNode;
+}) {
+  return (
+    <label
+      className={`flex min-h-[48px] cursor-pointer items-start gap-3 rounded-md border-2 px-3 py-3 font-bold
+        ${checked ? "border-ink bg-mist" : "border-rule hover:border-ink-2"}`}
+    >
+      <input
+        type="radio"
+        name={name}
+        value={value}
+        checked={checked}
+        onChange={() => onChange(value)}
+        className="mt-1 h-5 w-5 shrink-0 accent-ink"
+      />
+      <span>{children}</span>
+    </label>
   );
 }

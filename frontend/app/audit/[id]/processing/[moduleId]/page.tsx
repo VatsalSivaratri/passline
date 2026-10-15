@@ -1,145 +1,118 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { getModuleStatus } from "@/lib/api";
+import { spaceInfo } from "@/lib/spaces";
+import DimensionSteps from "@/components/DimensionSteps";
+import Notice from "@/components/Notice";
 
-const STEPS = [
-  { key: "extracting_frames",   label: "Extracting key frames",     icon: "🎞️" },
-  { key: "analyzing",           label: "Analyzing features with AI", icon: "🔍" },
-  { key: "checking_compliance", label: "Checking compliance rules",  icon: "📋" },
-  { key: "complete",            label: "Complete",                   icon: "✅" },
+// Backend statuses in pipeline order, grouped into the stages a person cares about.
+const STAGES: { label: string; statuses: string[] }[] = [
+  { label: "Pull frames", statuses: ["uploading", "extracting_frames", "classifying"] },
+  { label: "Find features", statuses: ["analyzing"] },
+  { label: "Check rules", statuses: ["checking_compliance"] },
+  { label: "Done", statuses: ["complete"] },
 ];
 
-function currentStepIndex(status: string): number {
-  const idx = STEPS.findIndex((s) => s.key === status);
-  return idx >= 0 ? idx : 0;
+function stageIndex(status: string) {
+  const i = STAGES.findIndex((s) => s.statuses.includes(status));
+  return i < 0 ? 0 : i;
 }
 
 export default function ProcessingPage() {
-  const router = useRouter();
   const { id, moduleId } = useParams<{ id: string; moduleId: string }>();
-
-  const [status, setStatus] = useState("extracting_frames");
-  const [progress, setProgress] = useState(0);
-  const [moduleType, setModuleType] = useState<string | null>(null);
-  const [violationsFound, setViolationsFound] = useState<number | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [data, setData] = useState<{
+    status: string; progress: number; module_type: string | null;
+    violations_found: number | null; error_message: string | null;
+  } | null>(null);
+  const [unreachable, setUnreachable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-
+    let timer: ReturnType<typeof setTimeout>;
     async function poll() {
       try {
-        const data = await getModuleStatus(id, moduleId);
+        const d = await getModuleStatus(id, moduleId);
         if (cancelled) return;
-        setStatus(data.status);
-        setProgress(data.progress ?? 0);
-        setModuleType(data.module_type ?? null);
-        setViolationsFound(data.violations_found ?? null);
-        setErrorMessage(data.error_message ?? null);
-
-        if (data.status === "complete") {
-          setTimeout(() => {
-            if (!cancelled) router.push(`/audit/${id}/modules`);
-          }, 1500);
-        }
-      } catch {}
+        setData(d);
+        setUnreachable(false);
+        if (d.status === "complete" || d.status === "error") return; // stop polling
+      } catch {
+        if (!cancelled) setUnreachable(true);
+      }
+      timer = setTimeout(poll, 2500);
     }
-
     poll();
-    const interval = setInterval(poll, 2500);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [id, moduleId, router]);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [id, moduleId]);
 
-  const stepIdx = currentStepIndex(status);
-  const isError = status === "error";
-  const isComplete = status === "complete";
+  const status = data?.status ?? "extracting_frames";
+  const failed = status === "error";
+  const complete = status === "complete";
+  const current = stageIndex(status);
+  const title = spaceInfo(data?.module_type).title;
+  const n = data?.violations_found ?? 0;
+
+  const steps = STAGES.map((s, i) => ({
+    label: s.label,
+    state: (complete || i < current ? "done" : i === current ? "current" : "todo") as "done" | "current" | "todo",
+  }));
 
   return (
-    <div className="max-w-md mx-auto flex flex-col items-center gap-8 pt-12">
-      {/* Spinner / checkmark */}
-      <div className={`w-20 h-20 rounded-full flex items-center justify-center text-4xl
-        ${isError ? "bg-red-100" : isComplete ? "bg-green-100" : "bg-blue-100"}`}>
-        {isError ? "❌" : isComplete ? "✅" : "⏳"}
-      </div>
+    <div className="max-w-prose">
+      <Link href={`/audit/${id}/modules`} className="link">Back to spaces</Link>
+      <h1 className="mt-4 text-2xl">
+        {failed ? `${title}: processing failed` : complete ? `${title}: done` : `Analyzing ${title.toLowerCase()}`}
+      </h1>
 
-      <div className="text-center">
-        <h1 className="text-xl font-bold text-slate-900">
-          {isError ? "Processing Error" : isComplete ? "Analysis Complete!" : "Analyzing your video..."}
-        </h1>
-        {!isError && !isComplete && (
-          <p className="text-slate-500 text-sm mt-1">This takes 30-90 seconds. Please wait.</p>
+      {/* The backend doesn't report which stage failed, so on failure the track is hidden
+          rather than guessing; the error message names the cause. */}
+      {!failed && (
+        <div className="mt-10">
+          <DimensionSteps label="Processing stages" steps={steps} />
+        </div>
+      )}
+
+      <div className="mt-10" aria-live="polite">
+        {!failed && !complete && (
+          <p>
+            {STAGES[current].label}. This usually takes under two minutes; you can leave this page and
+            check back from the space list.
+            {data && <span className="text-ink-2"> ({data.progress}% done)</span>}
+          </p>
+        )}
+
+        {complete && (
+          <div className="flex flex-col items-start gap-5">
+            <Notice tone={n > 0 ? "info" : "success"} title={n > 0 ? `${n} possible ${n === 1 ? "violation" : "violations"} found` : "No violations found"}>
+              {n > 0
+                ? "They’ll appear in the report with the ADA section and the frames they came from."
+                : "Nothing in this video matched a rule. That isn’t proof the space complies; Passline only checks what the camera can see."}
+            </Notice>
+            <Link href={`/audit/${id}/modules`} className="btn-primary">Back to spaces</Link>
+          </div>
+        )}
+
+        {failed && (
+          <div className="flex flex-col items-start gap-5">
+            <Notice tone="error" title="This video couldn’t be analyzed.">
+              {data?.error_message ?? "The server stopped before finishing."}
+            </Notice>
+            <div className="flex flex-wrap gap-3">
+              <Link href={`/audit/${id}/capture/${data?.module_type ?? "auto"}`} className="btn-primary">Record again</Link>
+              <Link href={`/audit/${id}/modules`} className="btn-secondary">Back to spaces</Link>
+            </div>
+          </div>
+        )}
+
+        {unreachable && (
+          <div className="mt-5">
+            <Notice tone="error" title="Lost contact with the server.">This page keeps retrying. Processing continues on the server.</Notice>
+          </div>
         )}
       </div>
-
-      {/* Progress bar */}
-      {!isError && (
-        <div className="w-full">
-          <div className="flex justify-between text-xs text-slate-500 mb-1">
-            <span>Progress</span>
-            <span>{progress}%</span>
-          </div>
-          <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-blue-600 rounded-full transition-all duration-500"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Step list */}
-      {!isError && (
-        <div className="w-full flex flex-col gap-3">
-          {STEPS.map((step, i) => {
-            const done = i < stepIdx || isComplete;
-            const active = i === stepIdx && !isComplete;
-            return (
-              <div
-                key={step.key}
-                className={`flex items-center gap-3 rounded-lg px-4 py-3 text-sm
-                  ${done ? "bg-green-50 text-green-700" : active ? "bg-blue-50 text-blue-700 font-medium" : "bg-slate-50 text-slate-400"}`}
-              >
-                <span className="text-lg">{done ? "✅" : active ? "🔄" : "⬜"}</span>
-                <span>{step.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Complete */}
-      {isComplete && violationsFound !== null && (
-        <div className={`rounded-xl px-6 py-4 text-center font-semibold
-          ${violationsFound > 0 ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"}`}>
-          {violationsFound > 0
-            ? `${violationsFound} violation${violationsFound !== 1 ? "s" : ""} found`
-            : "No violations detected"}
-          <p className="text-xs font-normal mt-1 opacity-75">Redirecting to modules...</p>
-        </div>
-      )}
-
-      {/* Error */}
-      {isError && (
-        <div className="w-full flex flex-col gap-3">
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-red-700 text-sm">
-            {errorMessage ?? "An unexpected error occurred."}
-          </div>
-          <button
-            onClick={() => router.push(`/audit/${id}/capture/${moduleType ?? moduleId}`)}
-            className="w-full rounded-xl bg-blue-700 text-white py-3 font-bold hover:bg-blue-800 transition-colors"
-          >
-            Try Again
-          </button>
-          <button
-            onClick={() => router.push(`/audit/${id}/modules`)}
-            className="w-full rounded-xl border border-slate-300 py-3 font-medium text-slate-600 hover:bg-slate-50"
-          >
-            Back to Modules
-          </button>
-        </div>
-      )}
     </div>
   );
 }

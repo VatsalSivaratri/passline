@@ -41,3 +41,4 @@ bench/_tmp/
 
 
 .DS_Store
+*.tsbuildinfo

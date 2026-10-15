@@ -1,13 +1,60 @@
+@import "@fontsource/atkinson-hyperlegible-next/400.css";
+@import "@fontsource/atkinson-hyperlegible-next/700.css";
+@import "@fontsource/atkinson-hyperlegible-next/800.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --foreground-rgb: 15, 23, 42;
-  --background-rgb: 248, 250, 252;
+@layer base {
+  html {
+    font-size: 112.5%; /* 18px base: Atkinson reads best a little larger */
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-extrabold tracking-tight;
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  /* One focus style everywhere: a thick ink outline with a yellow halo,
+     visible on white, on yellow and on photos. */
+  :focus-visible {
+    outline: 3px solid #14243B;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px #FFD23F;
+    border-radius: 4px;
+  }
+  ::selection {
+    background: #FFD23F;
+    color: #14243B;
+  }
 }
 
-body {
-  color: rgb(var(--foreground-rgb));
-  background: rgb(var(--background-rgb));
+@layer components {
+  .btn {
+    @apply inline-flex min-h-[48px] items-center justify-center gap-2 rounded-md px-5 font-bold
+           transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary { @apply btn bg-ink text-paper hover:bg-[#22385A]; }
+  .btn-secondary { @apply btn border-2 border-ink text-ink hover:bg-mist; }
+  .field {
+    @apply block w-full min-h-[48px] rounded-md border-2 border-rule bg-paper px-3 text-ink
+           hover:border-ink-2 focus-visible:border-ink;
+  }
+  .link { @apply font-bold underline decoration-2 underline-offset-4 hover:decoration-mark; }
+  .marked { @apply bg-mark px-1 text-ink; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

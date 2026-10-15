@@ -3,94 +3,90 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createAudit } from "@/lib/api";
+import DoorPlan from "@/components/DoorPlan";
+import Notice from "@/components/Notice";
 
-export default function LandingPage() {
+const HOW = [
+  {
+    title: "Describe the building",
+    body: "State, type of business, when it was built and whether it was renovated. This decides which rules apply.",
+  },
+  {
+    title: "Record each space",
+    body: "Walk through the entrance, restroom, parking and other public areas with your phone, 15 to 40 seconds each.",
+  },
+  {
+    title: "Review the findings",
+    body: "Each likely barrier comes with the ADA section, what was seen, a suggested fix and the frames it came from.",
+  },
+];
+
+export default function Home() {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState(false);
 
-  async function handleStart() {
-    setLoading(true);
-    setError(null);
+  async function start() {
+    setStarting(true);
+    setError(false);
     try {
       const { audit_id } = await createAudit();
       router.push(`/audit/${audit_id}/questionnaire`);
-    } catch (e) {
-      setError("Could not connect to the server. Make sure the backend is running.");
-      setLoading(false);
+    } catch {
+      setError(true);
+      setStarting(false);
     }
   }
 
   return (
-    <div className="flex flex-col items-center text-center gap-10 pt-16">
-      {/* Hero */}
-      <div className="flex flex-col items-center gap-4">
-        <span className="rounded-full bg-blue-100 text-blue-700 text-sm font-semibold px-4 py-1">
-          ADA Compliance Made Simple
-        </span>
-        <h1 className="text-5xl font-black text-slate-900 leading-tight max-w-2xl">
-          Know your building&apos;s{" "}
-          <span className="text-blue-700">accessibility gaps</span> in minutes.
-        </h1>
-        <p className="text-lg text-slate-500 max-w-xl">
-          Record a short video of your entrance, restroom, or parking lot.
-          PASSLINE analyzes it with AI and delivers a professional ADA compliance
-          report with violation findings and remediation cost estimates.
-        </p>
-      </div>
-
-      {/* CTA */}
-      <div className="flex flex-col items-center gap-3">
-        <button
-          onClick={handleStart}
-          disabled={loading}
-          className="rounded-xl bg-blue-700 text-white px-10 py-4 text-lg font-bold shadow-lg
-                     hover:bg-blue-800 active:scale-95 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {loading ? "Starting audit..." : "Start New Audit"}
-        </button>
-        {error && (
-          <p className="text-red-600 text-sm max-w-sm">{error}</p>
-        )}
-        <p className="text-slate-400 text-sm">No account needed. Results in under 2 minutes.</p>
-      </div>
-
-      {/* Feature cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-2xl mt-4">
-        {[
-          {
-            icon: "📹",
-            title: "Record Video",
-            desc: "Walk through your space with your phone. 15-60 seconds is all it takes.",
-          },
-          {
-            icon: "🔍",
-            title: "AI Analysis",
-            desc: "Gemini detects features. Depth AI measures distances. Zero guessing.",
-          },
-          {
-            icon: "📋",
-            title: "Compliance Report",
-            desc: "Violation details, ADA sections cited, remediation costs. Download as PDF.",
-          },
-        ].map((f) => (
-          <div
-            key={f.title}
-            className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm"
-          >
-            <div className="text-3xl mb-2">{f.icon}</div>
-            <div className="font-semibold text-slate-800 mb-1">{f.title}</div>
-            <div className="text-slate-500 text-sm">{f.desc}</div>
+    <>
+      <section className="grid items-center gap-10 md:grid-cols-[1.1fr_1fr]">
+        <div>
+          <h1 className="text-3xl sm:text-4xl">Find the barriers in your building before someone else does.</h1>
+          <p className="mt-5 max-w-prose text-lg text-ink-2">
+            Record each public space on your phone. Passline checks what it sees against the 2010 ADA
+            Standards and tells you what may need fixing, with the rule behind each finding.
+          </p>
+          <div className="mt-8 flex flex-wrap items-center gap-4">
+            <button onClick={start} disabled={starting} className="btn-primary px-7 text-lg">
+              {starting ? "Starting audit…" : "Start an audit"}
+            </button>
+            <span className="text-ink-2">No account needed.</span>
           </div>
-        ))}
-      </div>
+          {error && (
+            <div className="mt-6 max-w-prose">
+              <Notice tone="error" title="Couldn’t reach the Passline server.">
+                Check that the backend is running on port 8000, then try again.
+              </Notice>
+            </div>
+          )}
+        </div>
+        <DoorPlan className="w-full max-w-md justify-self-center md:justify-self-end" />
+      </section>
 
-      {/* Modules covered */}
-      <div className="text-slate-500 text-sm">
-        Modules: <strong className="text-slate-700">Entrance</strong> &middot;{" "}
-        <strong className="text-slate-700">Restroom</strong> &middot;{" "}
-        <strong className="text-slate-700">Parking</strong> &middot; Hallway &middot; Dining &middot; Counter
-      </div>
-    </div>
+      <section aria-labelledby="how" className="mt-20 border-t-2 border-ink pt-8">
+        <h2 id="how" className="text-xl">How an audit works</h2>
+        <ol className="mt-6 grid gap-8 sm:grid-cols-3">
+          {HOW.map((step, i) => (
+            <li key={step.title}>
+              <span className="text-3xl font-extrabold text-ink" aria-hidden>
+                {i + 1}
+              </span>
+              <h3 className="mt-2 text-lg">{step.title}</h3>
+              <p className="mt-2 text-ink-2">{step.body}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section aria-labelledby="limits" className="mt-16 max-w-prose">
+        <h2 id="limits" className="text-xl">What it can’t tell you</h2>
+        <p className="mt-3 text-ink-2">
+          A camera can’t feel how hard a door is to open, test whether a floor is slip resistant, or
+          read braille, so Passline doesn’t check those. Treat every finding as a lead to verify with
+          a tape measure or a professional, not as a ruling.
+        </p>
+      </section>
+    </>
   );
 }
